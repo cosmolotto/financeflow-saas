@@ -618,20 +618,44 @@ def forgot_password():
     if smtp_user:
         try:
             import smtplib
+            from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText
-            smtp_pass = os.environ.get("SMTP_PASS","")
+            smtp_pass = os.environ.get("SMTP_PASS","").replace(" ","")  # remove spaces from app password
             smtp_host = os.environ.get("SMTP_HOST","smtp.gmail.com")
-            msg = MIMEText(f"Click to reset your FinanceFlow password:\n\n{reset_url}\n\nThis link expires in 1 hour.")
-            msg["Subject"] = "Reset your FinanceFlow password"
-            msg["From"] = smtp_user
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = "Reset your FinanceFlow password 🔑"
+            msg["From"] = f"FinanceFlow <{smtp_user}>"
             msg["To"] = email
-            with smtplib.SMTP_SSL(smtp_host, 465) as s:
-                s.login(smtp_user, smtp_pass)
-                s.send_message(msg)
-            return jsonify({"success":True,"message":"Reset link sent to your email!"})
+            text_body = f"Click to reset your FinanceFlow password:\n\n{reset_url}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, ignore this email."
+            html_body = f"""<html><body style="font-family:sans-serif;background:#030508;color:#e8eaf0;padding:40px">
+<div style="max-width:480px;margin:0 auto;background:#080d18;border:1px solid #1a2235;border-radius:16px;padding:40px">
+<h2 style="color:#FFD700;margin:0 0 8px">💰 FinanceFlow</h2>
+<h3 style="margin:0 0 20px">Reset your password</h3>
+<p style="color:#9ca3af;margin:0 0 24px">Click the button below to set a new password. This link expires in 1 hour.</p>
+<a href="{reset_url}" style="display:inline-block;background:linear-gradient(135deg,#FFD700,#FFA500);color:#000;font-weight:700;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:15px">Reset Password →</a>
+<p style="color:#6b7280;font-size:12px;margin-top:24px">If you didn't request this, you can safely ignore this email.</p>
+</div></body></html>"""
+            msg.attach(MIMEText(text_body,"plain"))
+            msg.attach(MIMEText(html_body,"html"))
+            # Try SSL port 465 first, fallback to TLS port 587
+            sent = False
+            try:
+                with smtplib.SMTP_SSL(smtp_host, 465) as s:
+                    s.login(smtp_user, smtp_pass)
+                    s.send_message(msg)
+                    sent = True
+            except:
+                with smtplib.SMTP(smtp_host, 587) as s:
+                    s.starttls()
+                    s.login(smtp_user, smtp_pass)
+                    s.send_message(msg)
+                    sent = True
+            if sent:
+                return jsonify({"success":True,"message":"✅ Reset link sent to your email!"})
         except Exception as e:
             print(f"Email error: {e}")
-    # No SMTP — return the link directly (works for testing, replace with email later)
+            # Fall through to return reset_url directly as backup
+    # No SMTP or email failed — return the link directly
     return jsonify({"success":True,"message":"Reset link generated!","reset_url":reset_url})
 
 @app.route("/api/reset-password", methods=["POST"])
