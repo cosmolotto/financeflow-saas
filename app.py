@@ -633,21 +633,23 @@ def forgot_password():
     if sendgrid_key:
         try:
             import urllib.request, json as _json
+            # Brevo (Sendinblue) API
             payload = _json.dumps({
-                "personalizations":[{"to":[{"email":email}]}],
-                "from":{"email":"noreply@financeflow.app","name":"FinanceFlow"},
+                "sender":{"name":"FinanceFlow","email":"noreply@financeflow.app"},
+                "to":[{"email":email}],
                 "subject":"Reset your FinanceFlow password 🔑",
-                "content":[{"type":"text/plain","value":text_body},{"type":"text/html","value":html_body}]
+                "htmlContent":html_body,
+                "textContent":text_body
             }).encode()
-            req = urllib.request.Request("https://api.sendgrid.com/v3/mail/send",
+            req = urllib.request.Request("https://api.brevo.com/v3/smtp/email",
                 data=payload,
-                headers={"Authorization":f"Bearer {sendgrid_key}","Content-Type":"application/json"},
+                headers={"api-key":sendgrid_key,"Content-Type":"application/json"},
                 method="POST")
             urllib.request.urlopen(req)
             sent = True
-            print(f"✅ SendGrid email sent to {email}")
+            print(f"✅ Brevo email sent to {email}")
         except Exception as e:
-            print(f"SendGrid error: {e}")
+            print(f"Brevo error: {e}")
     if not sent and smtp_user:
         try:
             import smtplib
