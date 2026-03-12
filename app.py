@@ -603,9 +603,10 @@ def forgot_password():
         return jsonify({"success":True,"message":"If that email exists, a reset link has been sent."})
     token = secrets.token_urlsafe(32)
     expires = int(time.time()) + 3600  # 1 hour
-    try: db.execute("ALTER TABLE users ADD COLUMN reset_token TEXT")
+    # Safe migration
+    try: db.execute("ALTER TABLE users ADD COLUMN reset_token TEXT"); db.commit()
     except: pass
-    try: db.execute("ALTER TABLE users ADD COLUMN reset_expires INTEGER")
+    try: db.execute("ALTER TABLE users ADD COLUMN reset_expires INTEGER"); db.commit()
     except: pass
     db.execute("UPDATE users SET reset_token=?,reset_expires=? WHERE id=?",(token,expires,u["id"]))
     db.commit(); db.close()
