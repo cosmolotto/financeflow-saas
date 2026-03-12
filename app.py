@@ -13,7 +13,7 @@ from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "financeflow_secret_2025_xK9mP3")
-DB    = os.environ.get("DB_PATH", "financeflow.db")
+DB    = os.environ.get("DB_PATH", "/app/data/financeflow.db" if os.path.exists("/app/data") else "financeflow.db")
 PORT  = int(os.environ.get("PORT", 5001))
 HBEAT = "worker_heartbeat.txt"
 
@@ -643,7 +643,7 @@ def forgot_password():
             }).encode()
             req = urllib.request.Request("https://api.brevo.com/v3/smtp/email",
                 data=payload,
-                headers={"api-key":sendgrid_key,"Content-Type":"application/json"},
+                headers={"api-key":sendgrid_key.strip(),"Content-Type":"application/json"},
                 method="POST")
             urllib.request.urlopen(req)
             sent = True
