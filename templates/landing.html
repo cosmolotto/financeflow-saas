@@ -396,9 +396,9 @@ async function doForgot() {
   const d = await r.json();
   if (d.success) {
     if (d.reset_url) {
-      okEl.innerHTML = '✅ Reset link:<br><a href="'+d.reset_url+'" style="color:#10b981;word-break:break-all" target="_blank">'+d.reset_url+'</a>';
+      okEl.innerHTML = '<b>✅ Click below to reset your password:</b><br><br><a href="'+d.reset_url+'" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#FFD700,#FFA500);color:#000;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px">Reset My Password →</a><br><br><small style="color:#6b7280">Link expires in 1 hour</small>';
     } else {
-      okEl.textContent = '✅ ' + d.message;
+      okEl.innerHTML = '✅ ' + d.message;
     }
     okEl.style.display = 'block';
   } else {

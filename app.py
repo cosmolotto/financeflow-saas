@@ -675,8 +675,8 @@ def forgot_password():
             print(f"SMTP error: {e}")
     if sent:
         return jsonify({"success":True,"message":"✅ Reset link sent to your email!"})
-    # No email config — return link directly on screen
-    return jsonify({"success":True,"message":"Reset link generated!","reset_url":reset_url})
+    # Always return the reset link so user can reset even if email fails
+    return jsonify({"success":True,"message":"✅ Use this link to reset your password:","reset_url":reset_url})
 
 @app.route("/api/reset-password", methods=["POST"])
 def do_reset_password():
