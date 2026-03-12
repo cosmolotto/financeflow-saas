@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.db
+generated_videos/
+worker_heartbeat.txt
+*.aiff
+*.zip
+{templates,static
+.DS_Store
+*.log
+venv/
+.venv/

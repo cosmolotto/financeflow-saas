@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinanceFlow — YouTube Automation for Finance Creators</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --gold:#FFD700;--gold2:#FFA500;--dark:#050810;--dark2:#0a0f1e;
+  --dark3:#111827;--text:#e8eaf0;--muted:#6b7280;--border:#1f2937;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--dark);color:var(--text);overflow-x:hidden}
+
+/* NAV */
+nav{display:flex;align-items:center;justify-content:space-between;padding:20px 60px;position:fixed;top:0;width:100%;z-index:100;background:rgba(5,8,16,0.9);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,215,0,0.1)}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--gold)}
+.logo span{color:var(--text)}
+nav .links{display:flex;gap:32px;align-items:center}
+nav a{color:var(--muted);text-decoration:none;font-size:14px;transition:color 0.2s}
+nav a:hover{color:var(--gold)}
+.btn{padding:10px 24px;border-radius:8px;font-weight:500;cursor:pointer;font-size:14px;transition:all 0.2s;text-decoration:none;display:inline-block}
+.btn-outline{border:1px solid var(--border);color:var(--text);background:transparent}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000;font-weight:700;border:none}
+.btn-gold:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,215,0,0.3)}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 20px 80px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(255,215,0,0.06) 0%,transparent 70%)}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,215,0,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,215,0,0.03) 1px,transparent 1px);background-size:60px 60px}
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.2);padding:6px 16px;border-radius:100px;font-size:13px;color:var(--gold);margin-bottom:32px}
+.badge::before{content:'⚡';font-size:14px}
+h1{font-family:'Syne',sans-serif;font-size:clamp(42px,7vw,90px);font-weight:800;line-height:1.05;letter-spacing:-2px;margin-bottom:24px}
+h1 .highlight{background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:20px;color:var(--muted);max-width:600px;line-height:1.6;margin-bottom:48px}
+.hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.hero-btns .btn{font-size:16px;padding:14px 32px}
+.hero-stats{display:flex;gap:60px;margin-top:80px;padding-top:60px;border-top:1px solid var(--border)}
+.stat-num{font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:var(--gold)}
+.stat-label{font-size:14px;color:var(--muted)}
+
+/* HOW IT WORKS */
+.section{padding:100px 60px;max-width:1200px;margin:0 auto}
+.section-tag{font-size:12px;font-weight:600;color:var(--gold);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px}
+h2{font-family:'Syne',sans-serif;font-size:clamp(32px,4vw,52px);font-weight:800;letter-spacing:-1px;margin-bottom:20px}
+.section-sub{font-size:18px;color:var(--muted);max-width:500px;line-height:1.6}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:64px}
+.step{background:var(--dark2);border:1px solid var(--border);border-radius:20px;padding:40px;position:relative;overflow:hidden;transition:border-color 0.3s}
+.step:hover{border-color:rgba(255,215,0,0.3)}
+.step::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold2))}
+.step-num{font-family:'Syne',sans-serif;font-size:64px;font-weight:800;color:rgba(255,215,0,0.08);position:absolute;top:16px;right:24px}
+.step-icon{font-size:36px;margin-bottom:20px}
+.step h3{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-bottom:12px}
+.step p{color:var(--muted);line-height:1.6;font-size:15px}
+
+/* FEATURES */
+.features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;margin-top:64px}
+.feature{background:var(--dark2);border:1px solid var(--border);border-radius:16px;padding:32px;transition:all 0.3s}
+.feature:hover{border-color:rgba(255,215,0,0.2);transform:translateY(-4px)}
+.feature-icon{font-size:32px;margin-bottom:16px}
+.feature h3{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;margin-bottom:8px}
+.feature p{color:var(--muted);font-size:14px;line-height:1.6}
+.feature-badge{display:inline-block;background:rgba(255,215,0,0.1);color:var(--gold);font-size:11px;padding:3px 10px;border-radius:100px;margin-top:12px;font-weight:600}
+
+/* PRICING */
+.pricing{background:var(--dark2);padding:100px 60px}
+.pricing-inner{max-width:1100px;margin:0 auto;text-align:center}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:64px}
+.plan{background:var(--dark);border:1px solid var(--border);border-radius:24px;padding:40px;text-align:left;position:relative;transition:all 0.3s}
+.plan:hover{border-color:rgba(255,215,0,0.3)}
+.plan.featured{border-color:var(--gold);background:linear-gradient(180deg,rgba(255,215,0,0.05) 0%,var(--dark) 100%)}
+.plan-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000;font-size:12px;font-weight:700;padding:4px 16px;border-radius:100px}
+.plan-name{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px}
+.plan-price{font-family:'Syne',sans-serif;font-size:52px;font-weight:800;color:var(--gold);line-height:1}
+.plan-price span{font-size:18px;color:var(--muted);font-family:'DM Sans',sans-serif}
+.plan-desc{color:var(--muted);font-size:14px;margin:12px 0 32px}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:12px;margin-bottom:40px}
+.plan-features li{font-size:14px;color:var(--text);display:flex;align-items:center;gap:10px}
+.plan-features li::before{content:'✓';color:var(--gold);font-weight:700;flex-shrink:0}
+.plan .btn{width:100%;text-align:center;padding:14px}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:var(--dark2);border:1px solid var(--border);border-radius:24px;padding:48px;width:100%;max-width:440px;position:relative}
+.modal h3{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;margin-bottom:8px}
+.modal p{color:var(--muted);margin-bottom:32px;font-size:15px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:500}
+.form-group input{width:100%;padding:12px 16px;background:var(--dark);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;transition:border-color 0.2s;font-family:'DM Sans',sans-serif}
+.form-group input:focus{border-color:var(--gold)}
+.form-tabs{display:flex;gap:0;margin-bottom:32px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.tab{flex:1;padding:10px;text-align:center;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;color:var(--muted)}
+.tab.active{background:var(--gold);color:#000;font-weight:700}
+.modal-close{position:absolute;top:20px;right:20px;cursor:pointer;color:var(--muted);font-size:20px;background:none;border:none;color:var(--muted)}
+.modal-close:hover{color:var(--text)}
+.error-msg{color:#ef4444;font-size:13px;margin-top:8px;display:none}
+
+/* FOOTER */
+footer{padding:60px;border-top:1px solid var(--border);text-align:center}
+footer p{color:var(--muted);font-size:14px}
+
+@media(max-width:768px){
+  nav{padding:16px 20px}
+  .section,.pricing{padding:60px 20px}
+  .steps,.features-grid,.plans{grid-template-columns:1fr}
+  .hero-stats{gap:32px}
+  .hero{padding:100px 20px 60px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Finance<span>Flow</span></div>
+  <div class="links">
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#" class="btn btn-outline" onclick="openModal('login')">Login</a>
+    <a href="#" class="btn btn-gold" onclick="openModal('register')">Start Free</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="badge">Fully Automated YouTube Growth</div>
+  <h1>Turn AI into a<br><span class="highlight">YouTube Income</span><br>Machine</h1>
+  <p>FinanceFlow automatically generates, uploads, and grows multiple YouTube finance channels — while you sleep.</p>
+  <div class="hero-btns">
+    <a href="#" class="btn btn-gold" onclick="openModal('register')">Start for Free →</a>
+    <a href="#how" class="btn btn-outline">See how it works</a>
+  </div>
+  <div class="hero-stats">
+    <div>
+      <div class="stat-num">10x</div>
+      <div class="stat-label">Faster than manual</div>
+    </div>
+    <div>
+      <div class="stat-num">$0</div>
+      <div class="stat-label">To start today</div>
+    </div>
+    <div>
+      <div class="stat-num">24/7</div>
+      <div class="stat-label">Auto-uploading</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="padding:100px 0">
+<div class="section">
+  <div class="section-tag">How it works</div>
+  <h2>3 steps to a fully<br>automated channel</h2>
+  <p class="section-sub">No editing software, no recording setup. Just connect and grow.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-icon">🔗</div>
+      <h3>Connect Your Channel</h3>
+      <p>Link your YouTube channel with one click. We support multiple channels per account — perfect for agencies.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-icon">🤖</div>
+      <h3>AI Generates Content</h3>
+      <p>Our AI writes unique scripts, records professional voice-overs, generates animated visuals, and assembles complete videos.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-icon">🚀</div>
+      <h3>Auto-Upload & Grow</h3>
+      <p>Videos upload automatically on your schedule with optimized titles, tags, descriptions, and thumbnails.</p>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="background:var(--dark2);padding:100px 0">
+<div class="section">
+  <div class="section-tag">Features</div>
+  <h2>Everything you need<br>to scale</h2>
+  <div class="features-grid">
+    <div class="feature">
+      <div class="feature-icon">🎙️</div>
+      <h3>AI Voice Narration</h3>
+      <p>Professional AI voices in multiple styles — authoritative, friendly, energetic. Sounds 100% human.</p>
+      <span class="feature-badge">Real Mac + ElevenLabs voices</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📱</div>
+      <h3>Shorts + Long-form</h3>
+      <p>Generate viral 60-second Shorts AND full 8-minute videos from the same dashboard.</p>
+      <span class="feature-badge">9:16 & 16:9 formats</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📊</div>
+      <h3>Multi-Channel Management</h3>
+      <p>Run 1 to 10 channels from a single dashboard. Each gets unique content — no duplication.</p>
+      <span class="feature-badge">Up to 10 channels</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎯</div>
+      <h3>SEO Optimized</h3>
+      <p>Every video gets AI-generated titles, descriptions, and tags optimized for YouTube's algorithm.</p>
+      <span class="feature-badge">Auto hashtags + tags</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🖼️</div>
+      <h3>Custom Thumbnails</h3>
+      <p>Eye-catching thumbnails generated automatically for every video with bold text and colors that get clicks.</p>
+      <span class="feature-badge">Click-optimized designs</span>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📅</div>
+      <h3>Upload Scheduling</h3>
+      <p>Set your posting schedule and forget it. Daily, every other day, or weekly — you choose the cadence.</p>
+      <span class="feature-badge">Set & forget</span>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" class="pricing">
+<div class="pricing-inner">
+  <div class="section-tag">Pricing</div>
+  <h2>Simple, transparent pricing</h2>
+  <p style="color:var(--muted);font-size:18px;margin-top:12px">Start free, scale when you're ready</p>
+  <div class="plans">
+    {% for plan_id, plan in plans.items() %}{% if plan_id != "admin" %}
+    <div class="plan {% if plan_id == 'pro' %}featured{% endif %}">
+      {% if plan_id == 'pro' %}<div class="plan-badge">MOST POPULAR</div>{% endif %}
+      <div class="plan-name">{{ plan.name }}</div>
+      <div class="plan-price">${{ plan.price }}<span>/mo</span></div>
+      <div class="plan-desc">{% if plan_id == 'starter' %}Perfect to get started{% elif plan_id == 'pro' %}For serious creators{% else %}For agencies & resellers{% endif %}</div>
+      <ul class="plan-features">
+        <li>{{ plan.channels }} YouTube channel{% if plan.channels > 1 %}s{% endif %}</li>
+        <li>{{ plan.videos_per_week }}{% if plan_id == 'agency' %}+{% endif %} videos per week</li>
+        <li>AI voice narration</li>
+        <li>Auto thumbnails & tags</li>
+        {% if plan_id != 'starter' %}<li>Priority generation queue</li>{% endif %}
+        {% if plan_id == 'agency' %}<li>White-label dashboard</li><li>API access</li>{% endif %}
+      </ul>
+      <a href="#" class="btn {% if plan_id == 'pro' %}btn-gold{% else %}btn-outline{% endif %}"
+         onclick="selectPlan('{{ plan_id }}')">
+        {% if plan_id == 'starter' %}Start Free{% else %}Get Started{% endif %}
+      </a>
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+</div>
+</section>
+
+<footer>
+  <div class="logo" style="font-size:18px;margin-bottom:16px">Finance<span>Flow</span></div>
+  <p>© 2026 FinanceFlow. Built for finance content creators.</p>
+</footer>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modalTitle">Create Account</h3>
+    <p id="modalSub">Start automating your YouTube channel today.</p>
+    <div class="form-tabs">
+      <div class="tab active" id="tab-register" onclick="switchTab('register')">Sign Up</div>
+      <div class="tab" id="tab-login" onclick="switchTab('login')">Login</div>
+    </div>
+    <div id="registerForm">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="regName" placeholder="Your name">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="you@email.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="regPassword" placeholder="At least 6 characters">
+        <div class="error-msg" id="regError"></div>
+      </div>
+      <button class="btn btn-gold" style="width:100%;padding:14px;font-size:16px" onclick="register()">
+        Create Free Account →
+      </button>
+    </div>
+    <div id="loginForm" style="display:none">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="you@email.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Your password">
+        <div class="error-msg" id="loginError"></div>
+      </div>
+      <button class="btn btn-gold" style="width:100%;padding:14px;font-size:16px" onclick="loginUser()">
+        Login →
+      </button>
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" onclick="showForgot();return false;" style="color:#6b7280;font-size:13px;text-decoration:none;hover:color:#FFD700">Forgot password?</a>
+      </div>
+    </div>
+    <!-- Forgot Password Form -->
+    <div id="forgotForm" style="display:none">
+      <div class="form-group">
+        <label>Enter your email address</label>
+        <input type="email" id="forgotEmail" placeholder="you@email.com">
+        <div class="error-msg" id="forgotError"></div>
+      </div>
+      <button class="btn btn-gold" style="width:100%;padding:14px;font-size:16px" onclick="doForgot()">
+        Send Reset Link →
+      </button>
+      <div id="forgotSuccess" style="display:none;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:12px;margin-top:14px;color:#10b981;font-size:13px"></div>
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" onclick="switchTab('login');return false;" style="color:#6b7280;font-size:13px;text-decoration:none">← Back to login</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openModal(tab) {
+  document.getElementById('authModal').classList.add('active');
+  switchTab(tab || 'register');
+}
+function closeModal() {
+  document.getElementById('authModal').classList.remove('active');
+}
+function switchTab(tab) {
+  document.getElementById('registerForm').style.display = tab==='register' ? 'block' : 'none';
+  document.getElementById('loginForm').style.display = tab==='login' ? 'block' : 'none';
+  document.getElementById('tab-register').classList.toggle('active', tab==='register');
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+}
+function selectPlan(plan) {
+  openModal('register');
+  // Store selected plan for after registration
+  window._selectedPlan = plan;
+}
+async function register() {
+  const name = document.getElementById('regName').value;
+  const email = document.getElementById('regEmail').value;
+  const password = document.getElementById('regPassword').value;
+  const err = document.getElementById('regError');
+  err.style.display = 'none';
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name, email, password})
+    });
+    const data = await res.json();
+    if (data.error) { err.textContent = data.error; err.style.display = 'block'; return; }
+    window.location.href = data.redirect;
+  } catch(e) { err.textContent = 'Something went wrong.'; err.style.display = 'block'; }
+}
+async function loginUser() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email, password})
+    });
+    const data = await res.json();
+    if (data.error) { err.textContent = data.error; err.style.display = 'block'; return; }
+    window.location.href = data.redirect;
+  } catch(e) { err.textContent = 'Something went wrong.'; err.style.display = 'block'; }
+}
+document.getElementById('authModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+function showForgot() {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('forgotForm').style.display = 'block';
+  document.getElementById('tab-login').classList.remove('active');
+}
+async function doForgot() {
+  const email = document.getElementById('forgotEmail').value.trim();
+  const errEl = document.getElementById('forgotError');
+  const okEl = document.getElementById('forgotSuccess');
+  errEl.style.display='none'; okEl.style.display='none';
+  if (!email) { errEl.textContent='Enter your email'; errEl.style.display='block'; return; }
+  const r = await fetch('/api/forgot-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+  const d = await r.json();
+  if (d.success) {
+    if (d.reset_url) {
+      okEl.innerHTML = '✅ Reset link:<br><a href="'+d.reset_url+'" style="color:#10b981;word-break:break-all" target="_blank">'+d.reset_url+'</a>';
+    } else {
+      okEl.textContent = '✅ ' + d.message;
+    }
+    okEl.style.display = 'block';
+  } else {
+    errEl.textContent = d.error || 'Something went wrong';
+    errEl.style.display = 'block';
+  }
+}
+</script>
+</body>
+</html>
