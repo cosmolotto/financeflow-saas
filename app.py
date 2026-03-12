@@ -710,3 +710,4 @@ def do_reset_password():
     db.execute("UPDATE users SET password=?,reset_token=NULL,reset_expires=NULL WHERE id=?",(hash_pw(password),u["id"]))
     db.commit(); db.close()
     return jsonify({"success":True})
+# fix
