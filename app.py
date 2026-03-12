@@ -655,24 +655,39 @@ def forgot_password():
             import smtplib
             from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText as _MIMEText
-            smtp_pass = os.environ.get("SMTP_PASS","").replace(" ","")
+            smtp_pass = os.environ.get("SMTP_PASS","").replace(" ","").strip()
             smtp_host = os.environ.get("SMTP_HOST","smtp.gmail.com")
+            print(f"📧 Trying SMTP: {smtp_host} user={smtp_user} pass_len={len(smtp_pass)}")
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = "Reset your FinanceFlow password 🔑"
-            msg["From"] = f"FinanceFlow <{smtp_user}>"
+            msg["Subject"] = "Reset your FinanceFlow password"
+            msg["From"] = smtp_user
             msg["To"] = email
             msg.attach(_MIMEText(text_body,"plain"))
             msg.attach(_MIMEText(html_body,"html"))
+            # Try TLS 587 first (works better on cloud servers)
             try:
-                with smtplib.SMTP_SSL(smtp_host,465) as s:
-                    s.login(smtp_user,smtp_pass); s.send_message(msg)
-            except:
-                with smtplib.SMTP(smtp_host,587) as s:
-                    s.starttls(); s.login(smtp_user,smtp_pass); s.send_message(msg)
-            sent = True
-            print(f"✅ SMTP email sent to {email}")
+                print("📧 Trying port 587 TLS...")
+                with smtplib.SMTP(smtp_host, 587, timeout=15) as s:
+                    s.ehlo()
+                    s.starttls()
+                    s.ehlo()
+                    s.login(smtp_user, smtp_pass)
+                    s.sendmail(smtp_user, email, msg.as_string())
+                sent = True
+                print(f"✅ Email sent via port 587!")
+            except Exception as e1:
+                print(f"⚠️ Port 587 failed: {e1}")
+                try:
+                    print("📧 Trying port 465 SSL...")
+                    with smtplib.SMTP_SSL(smtp_host, 465, timeout=15) as s:
+                        s.login(smtp_user, smtp_pass)
+                        s.sendmail(smtp_user, email, msg.as_string())
+                    sent = True
+                    print(f"✅ Email sent via port 465!")
+                except Exception as e2:
+                    print(f"❌ Port 465 also failed: {e2}")
         except Exception as e:
-            print(f"SMTP error: {e}")
+            print(f"❌ SMTP setup error: {e}")
     if sent:
         return jsonify({"success":True,"message":"✅ Reset link sent to your email!"})
     # Always return the reset link so user can reset even if email fails
