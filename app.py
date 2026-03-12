@@ -518,8 +518,10 @@ def admin_stats():
     stats["worker_online"]=worker_online()
     return jsonify(stats)
 
+# Always init DB (works with both gunicorn and direct run)
+init_db()
+
 if __name__=="__main__":
-    init_db()
     print("╔══════════════════════════════════════════════╗")
     print(f"║  💰 FinanceFlow  →  http://localhost:{PORT}     ║")
     print(f"║  👑 Admin panel →  http://localhost:{PORT}/admin ║")
