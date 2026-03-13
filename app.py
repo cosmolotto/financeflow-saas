@@ -264,8 +264,8 @@ def connect_channel():
     db.close()
     if count >= plan["channels"]:
         return jsonify({"error":f"Your {plan['name']} plan supports {plan['channels']} channel(s). Upgrade to add more."}),403
-base = request.host_url.replace("http://","https://").rstrip("/")    redir = f"{base}/api/channels/callback"
-    state = f"{session['user_id']}:{secrets.token_hex(8)}"
+base = request.host_url.rstrip("/")
+state = f"{session['user_id']}:{secrets.token_hex(8)}"
     session["oauth_state"] = state
     url = "https://accounts.google.com/o/oauth2/auth?"+urllib.parse.urlencode({
         "client_id":CLIENT_ID,"redirect_uri":redir,"response_type":"code",
@@ -282,8 +282,8 @@ def channel_callback():
         return redirect("/dashboard?error=auth_cancelled")
     user_id = state.split(":")[0]
     if not user_id: return redirect("/dashboard?error=invalid_state")
-base = request.host_url.replace("http://","https://").rstrip("/")    redir = f"{base}/api/channels/callback"
-    try:
+base = request.host_url.rstrip("/")
+try:
         data = urllib.parse.urlencode({"code":code,"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET,
             "redirect_uri":redir,"grant_type":"authorization_code"}).encode()
         with urllib.request.urlopen(urllib.request.Request("https://oauth2.googleapis.com/token",data=data,
