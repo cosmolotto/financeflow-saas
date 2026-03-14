@@ -1637,7 +1637,20 @@ def admin_set_plan(uid):
 @admin_required
 def admin_delete_user(uid):
     db = get_db()
-    db.execute("DELETE FROM users WHERE id=?", (uid,))
+    # Prevent deleting other admins
+    target = db.execute("SELECT is_admin FROM users WHERE id=?", (uid,)).fetchone()
+    if target and target["is_admin"]:
+        db.close()
+        return jsonify({"error": "Cannot delete admin accounts"}), 403
+    # Cascade delete
+    db.execute("DELETE FROM queue    WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM videos   WHERE user_id=?", (uid,))
+    db.execute("UPDATE channels SET active=0 WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM payments WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM referrals WHERE referrer_id=? OR referred_id=?", (uid, uid))
+    db.execute("DELETE FROM email_sequences WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM promotions WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM users    WHERE id=?", (uid,))
     db.commit(); db.close()
     return jsonify({"status": "deleted"})
 
