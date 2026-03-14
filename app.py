@@ -253,7 +253,78 @@ def admin_page():
     user = get_current_user()
     if not user or not user.get("is_admin"):
         return redirect("/")
-    return render_template("admin.html")
+    db = get_db()
+    # Stats
+    total_users  = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    total_vids   = db.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+    uploaded     = db.execute("SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
+    total_chans  = db.execute("SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
+    pro_users    = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
+    agency_users = db.execute("SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
+    mrr          = (pro_users * 29) + (agency_users * 99)
+    stats_data = {
+        "total_users":    total_users,
+        "total_videos":   total_vids,
+        "uploaded":       uploaded,
+        "total_channels": total_chans,
+        "pro_users":      pro_users,
+        "agency_users":   agency_users,
+        "mrr":            mrr,
+        "worker_online":  False,
+    }
+    # Users — include api_key and name alias
+    raw_users = db.execute(
+        "SELECT id, email, full_name, plan, is_admin, created_at FROM users ORDER BY created_at DESC"
+    ).fetchall()
+    users_list = []
+    for u in raw_users:
+        ud = dict(u)
+        ud["name"]    = u["full_name"] or ""
+        ud["api_key"] = hashlib.md5(f"ff-{u['id']}".encode()).hexdigest()
+        users_list.append(ud)
+    # Channels — alias schedule -> upload_schedule, youtube_channel_id -> channel_id
+    raw_chans = db.execute(
+        "SELECT c.id, c.channel_name, c.youtube_channel_id, c.niche, c.video_type, "
+        "c.schedule, c.videos_uploaded, c.created_at, u.email "
+        "FROM channels c LEFT JOIN users u ON c.user_id=u.id "
+        "WHERE c.active=1 ORDER BY c.created_at DESC"
+    ).fetchall()
+    channels_list = []
+    for c in raw_chans:
+        cd = dict(c)
+        cd["channel_id"]      = c["youtube_channel_id"]
+        cd["upload_schedule"] = c["schedule"]
+        channels_list.append(cd)
+    # Videos
+    raw_vids = db.execute(
+        "SELECT v.*, u.email, c.channel_name FROM videos v "
+        "LEFT JOIN users u ON v.user_id=u.id "
+        "LEFT JOIN channels c ON v.channel_id=c.id "
+        "ORDER BY v.created_at DESC LIMIT 100"
+    ).fetchall()
+    videos_list = [dict(r) for r in raw_vids]
+    # Admin email
+    admin_row = db.execute("SELECT email FROM users WHERE id=?", (user["user_id"],)).fetchone()
+    admin_email = admin_row["email"] if admin_row else ""
+    db.close()
+    # Load social keys from file
+    social_keys = {}
+    keys_file = "social_keys.json"
+    if os.path.exists(keys_file):
+        try:
+            with open(keys_file) as f:
+                social_keys = json.load(f)
+        except Exception:
+            social_keys = {}
+    return render_template("admin.html",
+        stats=stats_data,
+        mrr=mrr,
+        users=users_list,
+        channels=channels_list,
+        videos=videos_list,
+        social_keys=social_keys,
+        admin_email=admin_email,
+    )
 
 @app.route("/api/auth/register", methods=["POST"])
 def register():
@@ -318,6 +389,7 @@ def login():
         return jsonify({"error": "Internal server error", "detail": str(e)}), 500
 
 @app.route("/api/auth/logout", methods=["POST"])
+@app.route("/api/logout", methods=["POST"])
 def logout():
     session.clear()
     return jsonify({"status": "ok"})
@@ -600,16 +672,21 @@ def create_admin():
 @admin_required
 def admin_stats():
     db = get_db()
-    total_users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    total_vids  = db.execute("SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
-    total_chans = db.execute("SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
-    pro         = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
-    agency      = db.execute("SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
+    total_users   = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    total_vids    = db.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+    uploaded      = db.execute("SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
+    total_chans   = db.execute("SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
+    pro           = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
+    agency        = db.execute("SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
+    queue_pending = db.execute("SELECT COUNT(*) FROM queue WHERE status IN ('pending','processing')").fetchone()[0]
     db.close()
     return jsonify({
         "total_users": total_users, "total_videos": total_vids,
+        "uploaded": uploaded,
         "total_channels": total_chans, "mrr": (pro * 29) + (agency * 99),
         "pro_users": pro, "agency_users": agency,
+        "queue_pending": queue_pending,
+        "worker_online": False,
     })
 
 @app.route("/api/admin/users")
@@ -622,7 +699,7 @@ def admin_users():
     db.close()
     return jsonify([dict(r) for r in rows])
 
-@app.route("/api/admin/users/<int:uid>/plan", methods=["PUT"])
+@app.route("/api/admin/users/<int:uid>/plan", methods=["PUT", "POST"])
 @admin_required
 def admin_set_plan(uid):
     d = request.get_json() or {}
@@ -661,6 +738,26 @@ def admin_videos():
     ).fetchall()
     db.close()
     return jsonify([dict(r) for r in rows])
+
+@app.route("/api/admin/social-keys", methods=["POST"])
+@admin_required
+def admin_save_social_keys():
+    # Store social keys in a simple JSON file for the worker to read
+    d = request.get_json() or {}
+    platform = d.get("platform", "")
+    creds    = d.get("creds", {})
+    keys_file = "social_keys.json"
+    try:
+        existing = {}
+        if os.path.exists(keys_file):
+            with open(keys_file) as f:
+                existing = json.load(f)
+        existing[platform] = creds
+        with open(keys_file, "w") as f:
+            json.dump(existing, f)
+        return jsonify({"status": "saved"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/health")
 def health():

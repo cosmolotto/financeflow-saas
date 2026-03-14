@@ -388,18 +388,18 @@ function toast(msg,t='ok'){const e=document.getElementById('toast');e.textConten
 async function setPlan(uid,plan){
   const r=await fetch('/api/admin/users/'+uid+'/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan})});
   const d=await r.json();
-  if(d.success)toast('✅ Plan updated to '+plan);else toast(d.error,'er');
+  if(d.status)toast('✅ Plan updated to '+plan);else toast(d.error||'Update failed','er');
 }
 async function delUser(uid){
   if(!confirm('Delete this user and all their data? This cannot be undone.'))return;
   const r=await fetch('/api/admin/users/'+uid,{method:'DELETE'});
   const d=await r.json();
-  if(d.success){toast('User deleted');setTimeout(()=>location.reload(),800);}else toast(d.error,'er');
+  if(d.status){toast('User deleted');setTimeout(()=>location.reload(),800);}else toast(d.error||'Delete failed','er');
 }
 async function saveSocialKey(platform,creds){
   const r=await fetch('/api/admin/social-keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({platform,creds})});
   const d=await r.json();
-  if(d.success)toast('✅ '+platform+' keys saved!');else toast(d.error||'Save failed','er');
+  if(d.status)toast('✅ '+platform+' keys saved!');else toast(d.error||'Save failed','er');
 }
 function filterUsers(){
   const q=document.getElementById('user-search').value.toLowerCase();
@@ -414,8 +414,8 @@ async function refresh(){
   try{
     const r=await fetch('/api/admin/stats');const d=await r.json();
     const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-    set('s-users',d.users);set('s-ch',d.channels);set('s-vids',d.videos);
-    set('s-pro',d.pro);set('s-ag',d.agency);set('s-q',d.queue);
+    set('s-users',d.total_users);set('s-ch',d.total_channels);set('s-vids',d.uploaded);
+    set('s-pro',d.pro_users);set('s-ag',d.agency_users);set('s-q',d.queue_pending||0);
     set('mrr-val','$'+d.mrr);
     const wd=document.getElementById('wdot');
     const wdb=document.getElementById('worker-dot-big');
