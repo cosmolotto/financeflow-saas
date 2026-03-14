@@ -227,6 +227,67 @@ footer p{color:var(--muted);font-size:14px}
 </div>
 </section>
 
+<!-- COMPARISON TABLE -->
+<section style="padding:80px 60px;max-width:1100px;margin:0 auto">
+  <div class="section-tag">Why FinanceFlow</div>
+  <h2>vs. doing it manually</h2>
+  <table style="width:100%;border-collapse:collapse;margin-top:40px">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:14px 20px;color:var(--muted);font-size:13px;font-weight:600;border-bottom:1px solid var(--border)">Task</th>
+        <th style="padding:14px 20px;color:var(--muted);font-size:13px;font-weight:600;border-bottom:1px solid var(--border);text-align:center">Manual</th>
+        <th style="padding:14px 20px;color:var(--gold);font-size:13px;font-weight:700;border-bottom:1px solid rgba(255,215,0,0.3);text-align:center;background:rgba(255,215,0,0.04);border-radius:8px 8px 0 0">FinanceFlow</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for task, manual, ff in [
+        ('Write video script','30–60 min','~3 seconds (AI)'),
+        ('Record voiceover','20–40 min','Instant (ElevenLabs AI)'),
+        ('Edit & render video','1–2 hours','~2 min (automated)'),
+        ('Upload + write description','15 min','Fully automatic'),
+        ('Post to Twitter/Facebook','5–10 min','Fully automatic'),
+        ('Daily posting consistency','Hard to maintain','Set & forget'),
+        ('Cost per video','$50–200 (freelancer)','< $1'),
+        ('Channels you can manage','1–2','Up to 10'),
+      ] %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:14px 20px;font-size:14px">{{ task }}</td>
+        <td style="padding:14px 20px;text-align:center;color:var(--muted);font-size:13px">{{ manual }}</td>
+        <td style="padding:14px 20px;text-align:center;color:var(--green);font-size:13px;font-weight:600;background:rgba(255,215,0,0.02)">{{ ff }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- FAQ -->
+<section style="padding:80px 60px;max-width:800px;margin:0 auto">
+  <div class="section-tag">FAQ</div>
+  <h2>Common questions</h2>
+  <div style="margin-top:40px;display:flex;flex-direction:column;gap:2px" id="faq">
+    {% for q, a in [
+      ('Do I need any video editing skills?','No. FinanceFlow handles scripting, voiceover, video creation, thumbnails, and uploading. Zero editing required.'),
+      ('Will YouTube ban my channel for AI content?','No. AI-assisted content is allowed on YouTube as long as it follows their policies. Millions of creators use AI tools.'),
+      ('What happens to my trial after 7 days?','Your account downgrades to the free Starter plan automatically. No charge, no card required.'),
+      ('Can I use my own voice?','Yes — upload a 30-second audio sample and we clone your voice via ElevenLabs for all future videos.'),
+      ('How long does video generation take?','Shorts take 2–5 minutes. Long-form videos take 5–10 minutes depending on server load.'),
+      ('Do I need a YouTube channel first?','You need a YouTube account. Connect it during onboarding and we create a channel if needed.'),
+      ('What niches are supported?','Personal finance, investing, crypto, real estate, side hustles, and tax tips. More coming soon.'),
+      ('Can I post to TikTok and Instagram too?','Twitter and Facebook are supported now. TikTok and Instagram require developer approval — coming soon.'),
+      ('Is my YouTube data safe?','We only request upload and read permissions. We never delete existing videos or access your personal data.'),
+      ('Can I cancel anytime?','Yes. Cancel from your dashboard anytime. No long-term contracts.'),
+    ] %}
+    <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:8px">
+      <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block';this.querySelector('.faq-arrow').style.transform=this.nextElementSibling.style.display==='block'?'rotate(180deg)':'rotate(0)'"
+        style="width:100%;text-align:left;background:var(--dark2);border:none;padding:18px 20px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+        {{ q }}<span class="faq-arrow" style="color:var(--gold);transition:transform 0.2s;font-size:18px">›</span>
+      </button>
+      <div style="display:none;padding:16px 20px;color:var(--muted);font-size:14px;line-height:1.7;background:var(--dark)">{{ a }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
 <!-- PRICING -->
 <section id="pricing" class="pricing">
 <div class="pricing-inner">

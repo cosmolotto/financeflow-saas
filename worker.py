@@ -397,6 +397,22 @@ def process(job):
         print(f"Job {jid} COMPLETE!")
         prog("Cross-posting to social media...")
         cross_post_social(cid,vid_row_id,yt_url,sd["title"],niche,thumb)
+        # Auto-post to FinanceFlow's own Twitter if configured
+        try:
+            db2=get_db()
+            row=db2.execute("SELECT value FROM system_settings WHERE key='auto_post_on_upload'").fetchone()
+            db2.close()
+            if row and str(row["value"])=="1":
+                sys_creds={"api_key":os.environ.get("SYSTEM_TWITTER_API_KEY",""),
+                           "api_secret":os.environ.get("SYSTEM_TWITTER_API_SECRET",""),
+                           "access_token":os.environ.get("SYSTEM_TWITTER_ACCESS_TOKEN",""),
+                           "access_secret":os.environ.get("SYSTEM_TWITTER_ACCESS_SECRET","")}
+                if all(sys_creds.values()):
+                    tweet_text=f"🚀 New finance video just dropped: {sd['title']}\n\nMade with FinanceFlow.app — AI YouTube automation\n\n{yt_url}\n\n#personalfinance #finance #money"[:280]
+                    post_twitter(sys_creds,yt_url,tweet_text,niche)
+                    print("   📣 System Twitter post sent")
+        except Exception as e:
+            print(f"   System tweet failed: {e}")
     except Exception as e:
         done_fail(e)
 

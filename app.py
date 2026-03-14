@@ -1126,6 +1126,26 @@ def generate_video():
     if not ch:
         db.close()
         return jsonify({"error": "Channel not found"}), 404
+    # Server-side plan gating
+    user_row = db.execute("SELECT plan, COALESCE(trial_ends_at,0) AS trial_ends_at FROM users WHERE id=?",
+                          (request.uid,)).fetchone()
+    plan_key = user_row["plan"] if user_row else "starter"
+    trial_active = int(user_row["trial_ends_at"] or 0) > int(time.time()) if user_row else False
+    effective_plan = "pro" if (trial_active and plan_key == "starter") else plan_key
+    limits = PLANS.get(effective_plan, PLANS["starter"])
+    if not limits.get("custom_prompts") and custom_prompt:
+        db.close()
+        return jsonify({"error": "Custom prompts require Pro plan"}), 403
+    if limits["videos_per_week"] < 999:
+        from datetime import datetime, timedelta
+        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        week_count = db.execute(
+            "SELECT COUNT(*) FROM queue WHERE user_id=? AND created_at > ?",
+            (request.uid, week_ago)
+        ).fetchone()[0]
+        if week_count >= limits["videos_per_week"]:
+            db.close()
+            return jsonify({"error": f"Weekly limit of {limits['videos_per_week']} videos reached. Upgrade to generate more."}), 429
     job_id = db.execute(
         "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_prompt, custom_title) VALUES (?,?,?,?,?,?)",
         (request.uid, channel_id, video_type, niche, custom_prompt, custom_title)
