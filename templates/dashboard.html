@@ -562,6 +562,15 @@ tr:hover td{background:rgba(255,255,255,0.01)}
   </div>
 </div>
 
+<div class="ov" id="pm-payment">
+  <div class="mo"><button class="mc" onclick="cAll()">✕</button><h3>💳 Upgrade Plan</h3><div class="mo-s">Submit your bank transfer details to activate <strong id="pay-plan-label"></strong> plan</div>
+    <input type="hidden" id="pay-plan">
+    <div class="fd"><label>Selected Plan</label><select id="pay-plan-select" onchange="document.getElementById('pay-plan').value=this.value;document.getElementById('pay-plan-label').textContent=this.value.charAt(0).toUpperCase()+this.value.slice(1)"><option value="pro">Pro</option><option value="agency">Agency</option></select></div>
+    <div class="fd"><label>Bank Transfer Reference Number</label><input type="text" id="pay-ref" placeholder="e.g. TRF-20240314-XXXX"></div>
+    <div class="mf"><button class="btn bg" onclick="submitPayment()">Submit Payment Request</button><button class="btn bo" onclick="cAll()">Cancel</button></div>
+  </div>
+</div>
+
 <div class="ts" id="toast"></div>
 <script>
 const IS_PRO={{ 'true' if plan.custom_prompts else 'false' }};
@@ -579,7 +588,7 @@ function openModal(id){document.getElementById(id).classList.add('open');}
 function cAll(){document.querySelectorAll('.ov').forEach(o=>o.classList.remove('open'));}
 document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)cAll();}));
 
-async function connectCh(){toast('Opening YouTube authorization...','inf');const r=await fetch('/api/channels/connect');const d=await r.json();if(d.error){toast(d.error,'er');return;}window.location.href=d.auth_url;}
+function connectCh(){window.location.href='/api/channels/connect';}
 function openCS(id,n,v,s){document.getElementById('cs-id').value=id;document.getElementById('cs-n').value=n;document.getElementById('cs-v').value=v;document.getElementById('cs-s').value=s;openModal('pm-cs');}
 async function saveCS(){
   const id=document.getElementById('cs-id').value;
@@ -674,7 +683,8 @@ async function doSavePr(){const t=document.getElementById('sp-t').value.trim(),p
 async function delPr(id){const r=await fetch('/api/prompts/'+id,{method:'DELETE'});const d=await r.json();if(d.success){toast('Deleted');setTimeout(()=>location.reload(),500);}}
 
 // BILLING
-async function upgrade(plan){const r=await fetch('/api/account/upgrade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan})});const d=await r.json();if(d.success){toast(d.message,'ok');setTimeout(()=>location.reload(),1200);}else toast(d.error,'er');}
+function upgrade(plan){document.getElementById('pay-plan').value=plan;document.getElementById('pay-plan-select').value=plan;document.getElementById('pay-ref').value='';document.getElementById('pay-plan-label').textContent=plan.charAt(0).toUpperCase()+plan.slice(1);openModal('pm-payment');}
+async function submitPayment(){const plan=document.getElementById('pay-plan').value;const ref=document.getElementById('pay-ref').value.trim();if(!ref){toast('Please enter your bank transfer reference number','er');return;}const r=await fetch('/api/payments/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan,reference:ref})});const d=await r.json();cAll();if(d.success){toast(d.message||'Payment request submitted ✅','ok');setTimeout(()=>location.reload(),1500);}else toast(d.error,'er');}
 async function changePw(){const r=await fetch('/api/account/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current:document.getElementById('pw-cur').value,new:document.getElementById('pw-new').value})});const d=await r.json();if(d.success){toast('Password updated ✅');document.getElementById('pw-cur').value='';document.getElementById('pw-new').value='';}else toast(d.error,'er');}
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/';}
 
