@@ -786,14 +786,24 @@ def admin_page():
     admin_row    = db.execute("SELECT email FROM users WHERE id=?", (user["user_id"],)).fetchone()
     admin_email  = admin_row["email"] if admin_row else ""
     db.close()
+    # Read social keys from DB (system_settings) with file fallback for backwards compat
     social_keys = {}
-    keys_file = "social_keys.json"
-    if os.path.exists(keys_file):
-        try:
-            with open(keys_file) as f:
-                social_keys = json.load(f)
-        except Exception:
-            social_keys = {}
+    try:
+        db2 = get_db()
+        sk_row = db2.execute("SELECT value FROM system_settings WHERE key='social_keys'").fetchone()
+        db2.close()
+        if sk_row and sk_row["value"]:
+            social_keys = json.loads(sk_row["value"])
+    except Exception:
+        pass
+    if not social_keys:
+        keys_file = "social_keys.json"
+        if os.path.exists(keys_file):
+            try:
+                with open(keys_file) as f:
+                    social_keys = json.load(f)
+            except Exception:
+                social_keys = {}
     return render_template("admin.html",
         stats=stats_data, mrr=mrr,
         users=users_list, channels=channels_list,
@@ -856,7 +866,8 @@ def register():
                 Go to Dashboard →
             </a>
             </div>""")
-        return jsonify({"token": token, "redirect": "/onboarding" if not user.get("onboarding_complete") else "/dashboard"})
+        onboarding_done = bool(user["onboarding_complete"]) if "onboarding_complete" in user.keys() else False
+        return jsonify({"token": token, "redirect": "/dashboard" if onboarding_done else "/onboarding"})
     except sqlite3.IntegrityError:
         return jsonify({"error": "Email already registered"}), 400
     except Exception as e:
@@ -1701,18 +1712,20 @@ def admin_videos():
 @app.route("/api/admin/social-keys", methods=["POST"])
 @admin_required
 def admin_save_social_keys():
-    d         = request.get_json() or {}
-    platform  = d.get("platform", "")
-    creds     = d.get("creds", {})
-    keys_file = "social_keys.json"
+    d        = request.get_json() or {}
+    platform = d.get("platform", "")
+    creds    = d.get("creds", {})
     try:
-        existing = {}
-        if os.path.exists(keys_file):
-            with open(keys_file) as f:
-                existing = json.load(f)
+        db = get_db()
+        sk_row = db.execute("SELECT value FROM system_settings WHERE key='social_keys'").fetchone()
+        existing = json.loads(sk_row["value"]) if sk_row and sk_row["value"] else {}
         existing[platform] = creds
-        with open(keys_file, "w") as f:
-            json.dump(existing, f)
+        val = json.dumps(existing)
+        if sk_row:
+            db.execute("UPDATE system_settings SET value=? WHERE key='social_keys'", (val,))
+        else:
+            db.execute("INSERT INTO system_settings (key, value) VALUES ('social_keys',?)", (val,))
+        db.commit(); db.close()
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1877,10 +1890,13 @@ def save_branding():
     db.commit(); db.close()
     return jsonify({"success": True})
 
+ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 def _upload_file(ftype):
     f = request.files.get("file")
     if not f: return jsonify({"error": "No file"}), 400
-    ext = os.path.splitext(f.filename or "")[1].lower() or ".jpg"
+    ext = os.path.splitext(f.filename or "")[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTS:
+        return jsonify({"error": f"File type not allowed. Use: {', '.join(ALLOWED_IMAGE_EXTS)}"}), 400
     uploads_dir = os.path.join(os.getcwd(), "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
     fname = f"{ftype}_{request.uid}{ext}"

@@ -359,7 +359,7 @@ def process(job):
         wav=str(wd/"voice.wav")
         user_row=db.execute("SELECT custom_voice_id FROM users WHERE id=?",(uid,)).fetchone()
         voice_id=user_row["custom_voice_id"] if user_row and user_row["custom_voice_id"] else None
-        if not make_voice(sd["script"],wav,voice_id=voice_id): raise Exception("Voice failed — is Mac 'say' command available or ElevenLabs configured?")
+        if not make_voice(sd["script"],wav,voice_id=voice_id): raise Exception("Voice failed — set ELEVENLABS_API_KEY or ensure gTTS is installed (pip install gtts)")
         dur=get_duration(wav); print(f"   Duration: {dur:.1f}s")
 
         prog("Generating background music...")
@@ -447,7 +447,7 @@ def check_autopilot():
             niche = ch["niche"] or "personal_finance"
             db.execute(
                 "INSERT INTO queue (user_id, channel_id, video_type, niche, mode) VALUES (?,?,?,?,'auto')",
-                (ch["user_id"], ch["id"], ch.get("video_type", "short"), niche)
+                (ch["user_id"], ch["id"], ch["video_type"] or "short", niche)
             )
             db.commit()
             queued += 1
