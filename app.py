@@ -175,9 +175,15 @@ def landing():
 
 @app.route("/dashboard")
 def dashboard():
-    if not get_current_user():
+    user = get_current_user()
+    if not user:
         return redirect("/")
-    return render_template("dashboard.html")
+    db = get_db()
+    u = db.execute("SELECT plan, is_admin FROM users WHERE id=?", (user["user_id"],)).fetchone()
+    db.close()
+    plan = u["plan"] if u else "starter"
+    is_admin = bool(u["is_admin"]) if u else False
+    return render_template("dashboard.html", plan=plan, is_admin=is_admin, plans=PLANS)
 
 @app.route("/admin")
 def admin_page():
