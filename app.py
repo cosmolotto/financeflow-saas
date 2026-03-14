@@ -171,7 +171,7 @@ def send_email(to_email, to_name, subject, html):
 
 @app.route("/")
 def landing():
-    return render_template("landing.html")
+    return render_template("landing.html", plans=PLANS)
 
 @app.route("/dashboard")
 def dashboard():
