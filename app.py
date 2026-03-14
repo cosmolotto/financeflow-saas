@@ -4,186 +4,322 @@ Features: JWT auth, multi-provider payments, OpenAI scripts, Redis/Celery queue
 """
 
 from flask import Flask, request, jsonify, render_template, redirect, session, send_from_directory
-import sqlite3, os, json, hashlib, secrets, urllib.parse, urllib.request, time, random, re, threading
+import sqlite3
+import os
+import json
+import hashlib
+import secrets
+import urllib.parse
+import urllib.request
+import time
+import random
+import re
+import threading
 from functools import wraps
 
-# ── Optional dependencies ─────────────────────────────────────────────────────
+# ── Optional dependencies ───────────────────────────────────────────────
 try:
+    pass
+    pass
     import jwt as pyjwt
     HAS_JWT = True
 except ImportError:
+    pass
     HAS_JWT = False
     print("[WARN] PyJWT not installed — using insecure base64 tokens. pip install PyJWT")
 
 try:
+
+    pass
+    pass
     import stripe as stripe_lib
     HAS_STRIPE = True
 except ImportError:
+    pass
     HAS_STRIPE = False
 
 try:
+
+    pass
+    pass
     import openai as openai_lib
     HAS_OPENAI = True
 except ImportError:
+    pass
     HAS_OPENAI = False
 
 try:
+
+    pass
+    pass
     from celery import Celery as _Celery
     HAS_CELERY = True
 except ImportError:
+    pass
     HAS_CELERY = False
 
 try:
+
+    pass
+    pass
     import bcrypt as _bcrypt
     HAS_BCRYPT = True
 except ImportError:
+    pass
     HAS_BCRYPT = False
 
 try:
-    import psycopg2, psycopg2.extras
+
+    pass
+    pass
+    import psycopg2
+    import psycopg2.extras
     HAS_PG = True
 except ImportError:
+    pass
     HAS_PG = False
 
 try:
+
+    pass
+    pass
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
     HAS_LIMITER = True
 except ImportError:
+    pass
     HAS_LIMITER = False
 
-# ── App & config ──────────────────────────────────────────────────────────────
+# ── App & config ────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-railway")
 
-DB               = "financeflow.db"
-DATABASE_URL     = os.environ.get("DATABASE_URL", "")
-CLIENT_ID        = os.environ.get("GOOGLE_CLIENT_ID", "")
-CLIENT_SECRET    = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-APP_URL          = os.environ.get("APP_URL", "https://web-production-39b44.up.railway.app")
-REDIRECT_URI     = f"{APP_URL}/api/channels/callback"
-BREVO_KEY        = os.environ.get("BREVO_API_KEY", "")
-MASTER_KEY       = os.environ.get("MASTER_ADMIN_KEY", "MASTER_ADMIN_KEY")
-JWT_SECRET       = os.environ.get("SECRET_KEY", "change-me-in-railway")
-JWT_ALGO         = "HS256"
-STRIPE_KEY       = os.environ.get("STRIPE_SECRET_KEY", "")
+DB = "financeflow.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+APP_URL = os.environ.get(
+    "APP_URL",
+    "https://web-production-39b44.up.railway.app")
+REDIRECT_URI = f"{APP_URL}/api/channels/callback"
+BREVO_KEY = os.environ.get("BREVO_API_KEY", "")
+MASTER_KEY = os.environ.get("MASTER_ADMIN_KEY", "MASTER_ADMIN_KEY")
+JWT_SECRET = os.environ.get("SECRET_KEY", "change-me-in-railway")
+JWT_ALGO = "HS256"
+STRIPE_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WH_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-OPENAI_KEY       = os.environ.get("OPENAI_API_KEY", "")
-REDIS_URL        = os.environ.get("REDIS_URL", "")
-ELEVENLABS_KEY   = os.environ.get("ELEVENLABS_API_KEY", "")
-SYSTEM_TWITTER_API_KEY     = os.environ.get("SYSTEM_TWITTER_API_KEY", "")
-SYSTEM_TWITTER_API_SECRET  = os.environ.get("SYSTEM_TWITTER_API_SECRET", "")
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
+REDIS_URL = os.environ.get("REDIS_URL", "")
+ELEVENLABS_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+SYSTEM_TWITTER_API_KEY = os.environ.get("SYSTEM_TWITTER_API_KEY", "")
+SYSTEM_TWITTER_API_SECRET = os.environ.get("SYSTEM_TWITTER_API_SECRET", "")
 SYSTEM_TWITTER_ACCESS_TOKEN = os.environ.get("SYSTEM_TWITTER_ACCESS_TOKEN", "")
-SYSTEM_TWITTER_ACCESS_SECRET = os.environ.get("SYSTEM_TWITTER_ACCESS_SECRET", "")
+SYSTEM_TWITTER_ACCESS_SECRET = os.environ.get(
+    "SYSTEM_TWITTER_ACCESS_SECRET", "")
 
 PLANS = {
-    "starter": {"name": "Starter",        "channels": 1,  "videos_per_week": 3,   "price": 0,  "custom_prompts": False, "social_posting": False, "autopilot": False},
-    "pro":     {"name": "Pro",             "channels": 3,  "videos_per_week": 14,  "price": 29, "custom_prompts": True,  "social_posting": True,  "autopilot": False},
-    "agency":  {"name": "Agency",          "channels": 10, "videos_per_week": 999, "price": 99, "custom_prompts": True,  "social_posting": True,  "autopilot": True},
-    "growth":  {"name": "Until Monetized", "channels": 1,  "videos_per_week": 999, "price": 49, "custom_prompts": True,  "social_posting": True,  "autopilot": True},
+    "starter": {
+        "name": "Starter",
+        "channels": 1,
+        "videos_per_week": 3,
+        "price": 0,
+        "custom_prompts": False,
+        "social_posting": False,
+        "autopilot": False},
+    "pro": {
+        "name": "Pro",
+        "channels": 3,
+        "videos_per_week": 14,
+        "price": 29,
+        "custom_prompts": True,
+        "social_posting": True,
+        "autopilot": False},
+    "agency": {
+        "name": "Agency",
+                "channels": 10,
+                "videos_per_week": 999,
+                "price": 99,
+                "custom_prompts": True,
+                "social_posting": True,
+                "autopilot": True},
+    "growth": {
+        "name": "Until Monetized",
+        "channels": 1,
+        "videos_per_week": 999,
+        "price": 49,
+        "custom_prompts": True,
+        "social_posting": True,
+        "autopilot": True},
 }
 
-# ── Stripe setup ──────────────────────────────────────────────────────────────
+# ── Stripe setup ────────────────────────────────────────────────────────
 if HAS_STRIPE and STRIPE_KEY:
+    pass
     pass
     stripe_lib.api_key = STRIPE_KEY
 
-# ── Celery/Redis setup ────────────────────────────────────────────────────────
+# ── Celery/Redis setup ──────────────────────────────────────────────────
 celery_app = None
 if HAS_CELERY and REDIS_URL:
     pass
+    pass
     celery_app = _Celery("financeflow", broker=REDIS_URL, backend=REDIS_URL)
     celery_app.conf.update(
-        task_serializer="json", result_serializer="json", accept_content=["json"]
-    )
+        task_serializer="json",
+        result_serializer="json",
+        accept_content=["json"])
     print(f"[CELERY] Connected to Redis: {REDIS_URL[:40]}...")
 else:
+    pass
     print("[QUEUE] Using SQLite queue (no REDIS_URL set)")
 
-# ── Rate limiting (optional) ──────────────────────────────────────────────────
+# ── Rate limiting (optional) ────────────────────────────────────────────
 if HAS_LIMITER:
+    pass
     pass
     limiter = Limiter(key_func=get_remote_address, app=app,
                       default_limits=["200 per day", "50 per hour"])
 else:
+    pass
+
     class _FakeLimiter:
+        pass
+
         def limit(self, *a, **kw):
+            pass
             return lambda f: f
+
         def exempt(self, f):
+            pass
             return f
     limiter = _FakeLimiter()
 
-# ── PostgreSQL wrapper ─────────────────────────────────────────────────────────
+# ── PostgreSQL wrapper ──────────────────────────────────────────────────
+
+
 class _PGCur:
+    pass
     """Wraps psycopg2 DictCursor to behave like sqlite3 cursor."""
+
     def __init__(self, cur, is_insert=False):
+        pass
         self._cur = cur
         self.lastrowid = None
         if is_insert:
+            pass
             try:
+                pass
+                pass
                 row = cur.fetchone()
                 if row:
+                    pass
                     self.lastrowid = row.get("id") or row[0]
             except Exception:
                 pass
+                pass
+
     def fetchone(self):
+        pass
         try:
+            pass
+            pass
             return self._cur.fetchone()
         except Exception:
+            pass
             return None
+
     def fetchall(self):
+        pass
         try:
+            pass
+            pass
             return self._cur.fetchall() or []
         except Exception:
+            pass
             return []
+
     def __getitem__(self, key):
-        r = self.fetchone(); return r[key] if r else None
+        pass
+        r = self.fetchone()
+        return r[key] if r else None
+
 
 class _PGConn:
+
+    pass
     """Wraps psycopg2 connection to behave like sqlite3.Connection with ? placeholders."""
+
     def __init__(self, conn):
+        pass
         self._c = conn
+
     def execute(self, sql, params=()):
+        pass
         sql_pg = sql.replace("?", "%s")
         is_ins = sql_pg.strip().upper().startswith("INSERT")
         if is_ins and "RETURNING" not in sql_pg.upper():
+            pass
             sql_pg = sql_pg.rstrip("; \n") + " RETURNING id"
         cur = self._c.cursor()
         cur.execute(sql_pg, params)
         return _PGCur(cur, is_ins)
+
     def executescript(self, sql):
+        pass
         cur = self._c.cursor()
         for stmt in sql.split(";"):
+            pass
             s = stmt.strip()
             if not s or len(s) < 5:
+                pass
                 continue
-            s = re.sub(r"INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY", s, flags=re.I)
+            s = re.sub(r"INTEGER PRIMARY KEY AUTOINCREMENT",
+                       "SERIAL PRIMARY KEY", s, flags=re.I)
             s = s.replace("?", "%s")
             try:
+                pass
+                pass
                 cur.execute(s)
             except Exception:
+                pass
                 self._c.rollback()
         self._c.commit()
-    def commit(self):
-        self._c.commit()
-    def close(self):
-        try: self._c.close()
-        except: pass
 
-# ── Database ──────────────────────────────────────────────────────────────────
-def get_db():
-    if DATABASE_URL and HAS_PG:
+    def commit(self):
+        pass
+        self._c.commit()
+
+    def close(self):
+        pass
         try:
+            self._c.close()
+        except BaseException:
+            pass
+
+# ── Database ────────────────────────────────────────────────────────────
+
+
+def get_db():
+    pass
+    if DATABASE_URL and HAS_PG:
+        pass
+        try:
+            pass
+            pass
             conn = psycopg2.connect(DATABASE_URL,
                                     cursor_factory=psycopg2.extras.DictCursor)
             return _PGConn(conn)
         except Exception as e:
+            pass
             print(f"[DB] PostgreSQL failed ({e}), falling back to SQLite")
     db = sqlite3.connect(DB)
     db.row_factory = sqlite3.Row
     return db
 
+
 def init_db():
+
+    pass
     db = get_db()
     db.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -308,7 +444,10 @@ def init_db():
     db.commit()
     migrate_db()
 
+
 def migrate_db():
+
+    pass
     """Add new columns to existing tables without breaking existing data."""
     db = get_db()
     for sql in [
@@ -334,145 +473,224 @@ def migrate_db():
         "ALTER TABLE channels ADD COLUMN upload_schedule TEXT DEFAULT 'daily'",
     ]:
         try:
+            pass
+            pass
             db.execute(sql)
         except Exception:
             pass
+            pass
     # Backfill referral codes for users who don't have one
     try:
+        pass
+        pass
         users_no_code = db.execute(
             "SELECT id FROM users WHERE referral_code IS NULL OR referral_code=''"
         ).fetchall()
         for u in users_no_code:
+            pass
             code = secrets.token_hex(4).upper()
-            db.execute("UPDATE users SET referral_code=? WHERE id=?", (code, u["id"]))
+            db.execute(
+                "UPDATE users SET referral_code=? WHERE id=?", (code, u["id"]))
     except Exception:
+        pass
         pass
     db.commit()
 
+
 def worker_online_status():
+
+    pass
     HBEAT = "worker_heartbeat.txt"
     try:
+        pass
+        pass
         if os.path.exists(HBEAT):
+            pass
             age = time.time() - float(open(HBEAT).read().strip())
             return age < 30
     except Exception:
         pass
+        pass
     return False
 
-# ── Auth helpers ──────────────────────────────────────────────────────────────
+# ── Auth helpers ────────────────────────────────────────────────────────
+
+
 def hash_pw(pw):
+    pass
     if HAS_BCRYPT:
+        pass
         return _bcrypt.hashpw(pw.encode(), _bcrypt.gensalt()).decode()
     return hashlib.sha256(pw.encode()).hexdigest()
 
+
 def check_pw(pw, stored):
+
+    pass
     if HAS_BCRYPT:
+        pass
         try:
+            pass
+            pass
             return _bcrypt.checkpw(pw.encode(), stored.encode())
         except Exception:
+            pass
             pass
     # Fallback: sha256 comparison (for old accounts or no bcrypt)
     return stored == hashlib.sha256(pw.encode()).hexdigest()
 
+
 def _check_referral_rewards(referrer_id, db):
+
+    pass
     """Grant referral rewards based on tier milestones."""
-    count = db.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id=?", (referrer_id,)).fetchone()[0]
-    tiers = {1: ("pro", 7), 3: ("pro", 30), 10: ("agency", 90), 25: ("pro", 99999)}
+    count = db.execute(
+        "SELECT COUNT(*) FROM referrals WHERE referrer_id=?",
+        (referrer_id,
+         )).fetchone()[0]
+    tiers = {1: ("pro", 7), 3: ("pro", 30), 10: (
+        "agency", 90), 25: ("pro", 99999)}
     for threshold, (plan, days) in tiers.items():
+        pass
         if count >= threshold:
+            pass
             already = db.execute(
                 "SELECT id FROM referrals WHERE referrer_id=? AND rewarded>=?",
                 (referrer_id, threshold)
             ).fetchone()
             if not already:
+                pass
                 trial_ends = int(time.time()) + days * 86400
-                db.execute("UPDATE users SET plan=?, trial_ends_at=? WHERE id=?",
-                           (plan, trial_ends, referrer_id))
-                db.execute("UPDATE referrals SET rewarded=? WHERE referrer_id=? AND rewarded<?",
-                           (threshold, referrer_id, threshold))
+                db.execute(
+                    "UPDATE users SET plan=?, trial_ends_at=? WHERE id=?",
+                    (plan,
+                     trial_ends,
+                     referrer_id))
+                db.execute(
+                    "UPDATE referrals SET rewarded=? WHERE referrer_id=? AND rewarded<?",
+                    (threshold,
+                     referrer_id,
+                     threshold))
                 db.commit()
                 break
 
+
 def make_token(user_id, is_admin=False):
+
+    pass
     payload = {
-        "user_id":  user_id,
+        "user_id": user_id,
         "is_admin": is_admin,
-        "iat":      int(time.time()),
-        "exp":      int(time.time()) + 86400 * 30,  # 30 days
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 86400 * 30,  # 30 days
     }
     if HAS_JWT:
+        pass
         return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
     import base64
-    return base64.urlsafe_b64encode(
-        json.dumps({"user_id": user_id, "is_admin": is_admin, "ts": int(time.time())}).encode()
-    ).decode()
+    return base64.urlsafe_b64encode(json.dumps(
+        {"user_id": user_id, "is_admin": is_admin, "ts": int(time.time())}).encode()).decode()
+
 
 def parse_token(token):
+
+    pass
     if HAS_JWT:
+        pass
         try:
+            pass
+            pass
             return pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
         except Exception:
+            pass
             return None
     try:
+        pass
+        pass
         import base64
         return json.loads(base64.urlsafe_b64decode(token + "==").decode())
     except Exception:
+        pass
         return None
 
+
 def get_current_user():
+
+    pass
     token = (request.headers.get("Authorization", "").replace("Bearer ", "")
              or session.get("token", ""))
     return parse_token(token)
 
+
 def login_required(f):
+
+    pass
+
     @wraps(f)
     def wrap(*a, **kw):
+        pass
         user = get_current_user()
         if not user:
-            return (jsonify({"error": "Unauthorized"}), 401) if request.is_json else redirect("/")
-        request.uid      = user["user_id"]
+            pass
+            return (jsonify({"error": "Unauthorized"}),
+                    401) if request.is_json else redirect("/")
+        request.uid = user["user_id"]
         request.is_admin = user.get("is_admin", False)
         return f(*a, **kw)
     return wrap
 
+
 def admin_required(f):
+
+    pass
+
     @wraps(f)
     def wrap(*a, **kw):
+        pass
         user = get_current_user()
         if not user or not user.get("is_admin"):
+            pass
             return jsonify({"error": "Admin only"}), 403
         request.uid = user["user_id"]
         return f(*a, **kw)
     return wrap
 
-# ── Email ─────────────────────────────────────────────────────────────────────
+# ── Email ───────────────────────────────────────────────────────────────
+
+
 def send_email(to_email, to_name, subject, html):
+    pass
     if not BREVO_KEY:
+        pass
         print(f"[EMAIL] BREVO_API_KEY not set — skipping email to {to_email}")
         return False
     try:
+        pass
+        pass
         payload = json.dumps({
-            "sender":      {"name": "FinanceFlow", "email": "noreply@financeflow.app"},
-            "to":          [{"email": to_email, "name": to_name or to_email}],
-            "subject":     subject,
+            "sender": {"name": "FinanceFlow", "email": "noreply@financeflow.app"},
+            "to": [{"email": to_email, "name": to_name or to_email}],
+            "subject": subject,
             "htmlContent": html
         }).encode()
         req = urllib.request.Request(
             "https://api.brevo.com/v3/smtp/email",
             data=payload,
             headers={
-                "accept":       "application/json",
-                "api-key":      BREVO_KEY,
+                "accept": "application/json",
+                "api-key": BREVO_KEY,
                 "content-type": "application/json",
             }
         )
         with urllib.request.urlopen(req) as r:
             return r.status in (200, 201)
     except Exception as e:
+        pass
         print(f"[EMAIL ERROR] {e}")
         return False
 
-# ── OpenAI / Script generation ────────────────────────────────────────────────
+
+# ── OpenAI / Script generation ──────────────────────────────────────────
 FALLBACK_SCRIPTS = {
     "personal_finance": [
         "5 money mistakes that are killing your savings — and how to fix them fast.",
@@ -503,10 +721,16 @@ FALLBACK_SCRIPTS = {
     ],
 }
 
+
 def generate_script(prompt, niche="personal_finance", video_type="short"):
+
+    pass
     """Generate video script — OpenAI if key set, built-in fallback otherwise."""
     if OPENAI_KEY and HAS_OPENAI:
+        pass
         try:
+            pass
+            pass
             length_hint = (
                 "60-second YouTube Short (under 150 words, punchy hook, no fluff)"
                 if video_type == "short"
@@ -515,122 +739,176 @@ def generate_script(prompt, niche="personal_finance", video_type="short"):
             system_msg = (
                 "You are a viral finance content creator. Write engaging, punchy video scripts "
                 "optimized for YouTube. Include a strong hook, clear value, and a call to action. "
-                "No timestamps, scene directions, or stage notes — just the spoken script."
-            )
+                "No timestamps, scene directions, or stage notes — just the spoken script.")
             user_msg = f"Write a {length_hint} script about: {prompt or niche.replace('_', ' ')}"
-            client   = openai_lib.OpenAI(api_key=OPENAI_KEY)
-            resp     = client.chat.completions.create(
+            client = openai_lib.OpenAI(api_key=OPENAI_KEY)
+            resp = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_msg},
-                    {"role": "user",   "content": user_msg},
+                    {"role": "user", "content": user_msg},
                 ],
                 max_tokens=600 if video_type == "short" else 2000,
                 temperature=0.8,
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
+            pass
             print(f"[OPENAI ERROR] {e} — falling back to built-in scripts")
 
     # Fallback: use prompt as-is or pick from built-in pool
     if prompt:
+        pass
         return (
             f"Today we're talking about: {prompt}\n\n"
             f"This is one of the most important finance topics you'll ever learn. "
             f"Stay till the end — I'm going to share something most people get completely wrong.\n\n"
-            f"Here's what you need to know..."
-        )
+            f"Here's what you need to know...")
     pool = FALLBACK_SCRIPTS.get(niche, FALLBACK_SCRIPTS["personal_finance"])
     return random.choice(pool)
 
-# ── Celery task ───────────────────────────────────────────────────────────────
+
+# ── Celery task ─────────────────────────────────────────────────────────
 if celery_app:
     pass
+    pass
+
     @celery_app.task(name="financeflow.process_video")
     def process_video_task(job_id):
+        pass
         """Generate script and queue for upload."""
         db = get_db()
         try:
-            job = db.execute("SELECT * FROM queue WHERE id=?", (job_id,)).fetchone()
+            pass
+            pass
+            job = db.execute(
+                "SELECT * FROM queue WHERE id=?", (job_id,)).fetchone()
             if not job:
+                pass
                 return {"error": "job not found"}
-            db.execute("UPDATE queue SET status='processing', progress='Generating script...' WHERE id=?", (job_id,))
+            db.execute(
+                "UPDATE queue SET status='processing', progress='Generating script...' WHERE id=?",
+                (job_id,
+                 ))
             db.commit()
-            script = generate_script(job["custom_prompt"] or "", job["niche"], job["video_type"])
-            title  = (job["custom_title"] or
-                      f"{job['niche'].replace('_', ' ').title()} — {job['video_type'].upper()}")
+            script = generate_script(
+                job["custom_prompt"] or "",
+                job["niche"],
+                job["video_type"])
+            title = (job["custom_title"] or
+                     f"{job['niche'].replace('_', ' ').title()} — {job['video_type'].upper()}")
             db.execute(
                 "INSERT INTO videos (user_id, channel_id, title, type, status, script) VALUES (?,?,?,?,?,?)",
-                (job["user_id"], job["channel_id"], title, job["video_type"], "scripted", script)
-            )
-            db.execute("UPDATE queue SET status='scripted', progress='Script ready — pending upload' WHERE id=?", (job_id,))
+                (job["user_id"],
+                 job["channel_id"],
+                    title,
+                    job["video_type"],
+                    "scripted",
+                    script))
+            db.execute(
+                "UPDATE queue SET status='scripted', progress='Script ready — pending upload' WHERE id=?",
+                (job_id,
+                 ))
             db.commit()
             return {"status": "scripted", "job_id": job_id}
         except Exception as e:
-            db.execute("UPDATE queue SET status='failed', progress=? WHERE id=?", (str(e), job_id))
+            pass
+            db.execute(
+                "UPDATE queue SET status='failed', progress=? WHERE id=?", (str(e), job_id))
             db.commit()
             return {"error": str(e)}
         finally:
             pass
+            pass
 else:
+    pass
+
     def process_video_task(job_id):
+        pass
         pass  # SQLite worker.py handles it
 
-# ── Page routes ───────────────────────────────────────────────────────────────
+# ── Page routes ─────────────────────────────────────────────────────────
+
+
 @app.route("/")
 def landing():
+    pass
     db = get_db()
     user_count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     founding_spots = max(0, 100 - user_count)
     show_reset = bool(request.args.get("show_reset"))
     reset_token = request.args.get("token", "")
-    return render_template("landing.html", plans=PLANS, user_count=user_count,
-                           founding_spots=founding_spots, show_reset=show_reset,
-                           reset_token=reset_token)
+    return render_template(
+        "landing.html",
+        plans=PLANS,
+        user_count=user_count,
+        founding_spots=founding_spots,
+        show_reset=show_reset,
+        reset_token=reset_token)
+
 
 @app.route("/privacy")
 def privacy():
+    pass
     return render_template("privacy.html")
+
 
 @app.route("/terms")
 def terms():
+    pass
     return render_template("terms.html")
+
 
 @app.route("/onboarding")
 def onboarding():
+    pass
     user = get_current_user()
     if not user:
+        pass
         return redirect("/")
     return render_template("onboarding.html")
 
+
 @app.route("/reset-password")
 def reset_password_page():
+    pass
     token = request.args.get("token", "")
     return redirect(f"/?show_reset=1&token={token}")
 
+
 @app.route("/robots.txt")
 def robots_txt():
+    pass
     from flask import Response
-    return Response("User-agent: *\nAllow: /\nSitemap: " + APP_URL + "/sitemap.xml\n",
-                    mimetype="text/plain")
+    return Response(
+        "User-agent: *\nAllow: /\nSitemap: " +
+        APP_URL +
+        "/sitemap.xml\n",
+        mimetype="text/plain")
+
 
 @app.route("/sitemap.xml")
 def sitemap_xml():
+    pass
     from flask import Response
     urls = [APP_URL + p for p in ["/", "/privacy", "/terms"]]
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for u in urls:
+        pass
         xml += f"  <url><loc>{u}</loc></url>\n"
     xml += "</urlset>"
     return Response(xml, mimetype="application/xml")
 
+
 @app.route("/dashboard")
 def dashboard():
+    pass
     user = get_current_user()
     if not user:
+        pass
         return redirect("/")
     db = get_db()
-    u  = db.execute(
+    u = db.execute(
         "SELECT id, email, full_name, plan, is_admin, "
         "COALESCE(is_founding_member,0) AS is_founding_member, "
         "COALESCE(trial_ends_at,0) AS trial_ends_at, "
@@ -639,38 +917,44 @@ def dashboard():
         "FROM users WHERE id=?", (user["user_id"],)
     ).fetchone()
     if not u:
+        pass
         return redirect("/")
 
-    is_admin  = bool(u["is_admin"])
-    plan_key  = u["plan"] or "starter"
+    is_admin = bool(u["is_admin"])
+    plan_key = u["plan"] or "starter"
     plan_data = dict(PLANS.get(plan_key, PLANS["starter"]))
     if is_admin:
+        pass
         plan_data.update({"channels": 9999, "videos_per_week": 9999,
                           "custom_prompts": True, "social_posting": True})
 
     trial_ends = int(u["trial_ends_at"] or 0)
     trial_active = trial_ends > int(time.time())
-    trial_days_left = max(0, (trial_ends - int(time.time())) // 86400) if trial_active else 0
+    trial_days_left = max(
+        0, (trial_ends - int(time.time())) // 86400) if trial_active else 0
 
     # Effective plan: if trial active, treat as Pro
     if trial_active and plan_key == "starter":
+        pass
         plan_data = dict(PLANS.get("pro", PLANS["starter"]))
 
-    ref_count = db.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id=?",
-                           (u["id"],)).fetchone()[0]
+    ref_count = db.execute(
+        "SELECT COUNT(*) FROM referrals WHERE referrer_id=?",
+        (u["id"],
+         )).fetchone()[0]
 
     user_obj = {
-        "email":            u["email"],
-        "name":             u["full_name"] or u["email"],
-        "plan":             plan_key,
-        "api_key":          hashlib.md5(f"ff-{u['id']}".encode()).hexdigest(),
-        "is_founding":      bool(u["is_founding_member"]),
-        "is_first_user":    u["id"] == 1,
-        "trial_active":     trial_active,
-        "trial_days_left":  trial_days_left,
-        "referral_code":    u["referral_code"],
-        "referral_url":     f"{APP_URL}/?ref={u['referral_code']}",
-        "total_referrals":  ref_count,
+        "email": u["email"],
+        "name": u["full_name"] or u["email"],
+        "plan": plan_key,
+        "api_key": hashlib.md5(f"ff-{u['id']}".encode()).hexdigest(),
+        "is_founding": bool(u["is_founding_member"]),
+        "is_first_user": u["id"] == 1,
+        "trial_active": trial_active,
+        "trial_days_left": trial_days_left,
+        "referral_code": u["referral_code"],
+        "referral_url": f"{APP_URL}/?ref={u['referral_code']}",
+        "total_referrals": ref_count,
     }
 
     channels = [dict(r) for r in db.execute(
@@ -708,57 +992,76 @@ def dashboard():
     ).fetchall():
         social.setdefault(row["channel_id"], []).append(dict(row))
 
-
     stats = {
-        "total":    len(videos),
+        "total": len(videos),
         "uploaded": sum(1 for v in videos if v["status"] == "uploaded"),
         "channels": len(channels),
-        "pending":  len(queue),
+        "pending": len(queue),
     }
 
     success = "channel_connected" if request.args.get("connected") else ""
 
-    return render_template("dashboard.html",
-        plan=plan_data, is_admin=is_admin, plans=PLANS,
-        user=user_obj, channels=channels, queue=queue,
-        videos=videos, social=social, stats=stats,
-        prompts=[dict(r) for r in db.execute(
-            "SELECT * FROM prompts WHERE user_id=? ORDER BY created_at DESC",
-            (u["id"],)).fetchall()],
+    return render_template(
+        "dashboard.html",
+        plan=plan_data,
+        is_admin=is_admin,
+        plans=PLANS,
+        user=user_obj,
+        channels=channels,
+        queue=queue,
+        videos=videos,
+        social=social,
+        stats=stats,
+        prompts=[
+            dict(r) for r in db.execute(
+                "SELECT * FROM prompts WHERE user_id=? ORDER BY created_at DESC",
+                (u["id"],
+                 )).fetchall()],
         worker_online=worker_online_status(),
-        error=request.args.get("error", ""), success=success,
+        error=request.args.get(
+            "error",
+            ""),
+        success=success,
     )
+
 
 @app.route("/admin")
 def admin_page():
+    pass
     user = get_current_user()
     if not user or not user.get("is_admin"):
+        pass
         return redirect("/")
     db = get_db()
-    total_users  = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    total_vids   = db.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
-    uploaded     = db.execute("SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
-    total_chans  = db.execute("SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
-    pro_users    = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
-    agency_users = db.execute("SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
-    mrr          = (pro_users * 29) + (agency_users * 99)
+    total_users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    total_vids = db.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+    uploaded = db.execute(
+        "SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
+    total_chans = db.execute(
+        "SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
+    pro_users = db.execute(
+        "SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
+    agency_users = db.execute(
+        "SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
+    mrr = (pro_users * 29) + (agency_users * 99)
     stats_data = {
-        "total_users":    total_users,
-        "total_videos":   total_vids,
-        "uploaded":       uploaded,
+        "total_users": total_users,
+        "total_videos": total_vids,
+        "uploaded": uploaded,
         "total_channels": total_chans,
-        "pro_users":      pro_users,
-        "agency_users":   agency_users,
-        "mrr":            mrr,
-        "worker_online":  worker_online_status(),
+        "pro_users": pro_users,
+        "agency_users": agency_users,
+        "mrr": mrr,
+        "worker_online": worker_online_status(),
     }
     raw_users = db.execute(
         "SELECT id, email, full_name, plan, is_admin, created_at FROM users ORDER BY created_at DESC"
     ).fetchall()
     users_list = []
     for u in raw_users:
+        pass
         ud = dict(u)
-        ud["name"]    = u["full_name"] or ""
+        ud["name"] = u["full_name"] or ""
         ud["api_key"] = hashlib.md5(f"ff-{u['id']}".encode()).hexdigest()
         users_list.append(ud)
     raw_chans = db.execute(
@@ -767,12 +1070,12 @@ def admin_page():
         "COALESCE(c.autopilot,0) AS autopilot, COALESCE(c.monetized,0) AS monetized, "
         "COALESCE(c.subscriber_count,0) AS subscriber_count "
         "FROM channels c LEFT JOIN users u ON c.user_id=u.id "
-        "WHERE c.active=1 ORDER BY c.created_at DESC"
-    ).fetchall()
+        "WHERE c.active=1 ORDER BY c.created_at DESC").fetchall()
     channels_list = []
     for c in raw_chans:
+        pass
         cd = dict(c)
-        cd["channel_id"]      = c["youtube_channel_id"]
+        cd["channel_id"] = c["youtube_channel_id"]
         cd["upload_schedule"] = c["schedule"]
         channels_list.append(cd)
     raw_vids = db.execute(
@@ -781,48 +1084,69 @@ def admin_page():
         "LEFT JOIN channels c ON v.channel_id=c.id "
         "ORDER BY v.created_at DESC LIMIT 100"
     ).fetchall()
-    videos_list  = [dict(r) for r in raw_vids]
-    admin_row    = db.execute("SELECT email FROM users WHERE id=?", (user["user_id"],)).fetchone()
-    admin_email  = admin_row["email"] if admin_row else ""
-    # Read social keys from DB (system_settings) with file fallback for backwards compat
+    videos_list = [dict(r) for r in raw_vids]
+    admin_row = db.execute(
+        "SELECT email FROM users WHERE id=?",
+        (user["user_id"],
+         )).fetchone()
+    admin_email = admin_row["email"] if admin_row else ""
+    # Read social keys from DB (system_settings) with file fallback for
+    # backwards compat
     social_keys = {}
     try:
+        pass
+        pass
         db2 = get_db()
-        sk_row = db2.execute("SELECT value FROM system_settings WHERE key='social_keys'").fetchone()
+        sk_row = db2.execute(
+            "SELECT value FROM system_settings WHERE key='social_keys'").fetchone()
         db2.close()
         if sk_row and sk_row["value"]:
+            pass
             social_keys = json.loads(sk_row["value"])
     except Exception:
         pass
+        pass
     if not social_keys:
+        pass
         keys_file = "social_keys.json"
         if os.path.exists(keys_file):
+            pass
             try:
+                pass
+                pass
                 with open(keys_file) as f:
                     social_keys = json.load(f)
             except Exception:
+                pass
                 social_keys = {}
     return render_template("admin.html",
-        stats=stats_data, mrr=mrr,
-        users=users_list, channels=channels_list,
-        videos=videos_list, social_keys=social_keys,
-        admin_email=admin_email,
-    )
+                           stats=stats_data, mrr=mrr,
+                           users=users_list, channels=channels_list,
+                           videos=videos_list, social_keys=social_keys,
+                           admin_email=admin_email,
+                           )
 
-# ── Auth API ──────────────────────────────────────────────────────────────────
+# ── Auth API ────────────────────────────────────────────────────────────
+
+
 @app.route("/api/auth/register", methods=["POST"])
 def register():
-    d         = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     print(f"[REGISTER] Raw payload: {d}")
-    email     = d.get("email", "").strip().lower()
-    password  = d.get("password", "")
+    email = d.get("email", "").strip().lower()
+    password = d.get("password", "")
     full_name = d.get("full_name", "") or d.get("name", "")
-    print(f"[REGISTER] email={email!r} full_name={full_name!r} password_set={bool(password)}")
+    print(
+        f"[REGISTER] email={email!r} full_name={full_name!r} password_set={bool(password)}")
     if not email or not password:
+        pass
         return jsonify({"error": "Email and password required"}), 400
     ref_code = d.get("ref", "").strip().upper()
     db = get_db()
     try:
+        pass
+        pass
         # Count existing users for founding member check
         user_count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         is_founding = 1 if user_count < 100 else 0
@@ -832,27 +1156,41 @@ def register():
         ref_code_new = secrets.token_hex(4).upper()
         db.execute(
             "INSERT INTO users (email, password_hash, full_name, is_founding_member, trial_ends_at, referral_code) VALUES (?,?,?,?,?,?)",
-            (email, hash_pw(password), full_name, is_founding, trial_ends, ref_code_new)
-        )
+            (email,
+             hash_pw(password),
+             full_name,
+             is_founding,
+             trial_ends,
+             ref_code_new))
         db.commit()
-        user  = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
-        uid   = user["id"]
+        user = db.execute(
+            "SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        uid = user["id"]
         # First user gets Lifetime Agency
         if uid == 1:
+            pass
             db.execute("UPDATE users SET plan='agency' WHERE id=1")
             db.commit()
         # Track referral
         if ref_code:
-            referrer = db.execute("SELECT id FROM users WHERE referral_code=?", (ref_code,)).fetchone()
+            pass
+            referrer = db.execute(
+                "SELECT id FROM users WHERE referral_code=?", (ref_code,)).fetchone()
             if referrer:
-                db.execute("INSERT INTO referrals (referrer_id, referred_id) VALUES (?,?)",
-                           (referrer["id"], uid))
-                db.execute("UPDATE users SET referred_by=? WHERE id=?", (referrer["id"], uid))
+                pass
+                db.execute(
+                    "INSERT INTO referrals (referrer_id, referred_id) VALUES (?,?)",
+                    (referrer["id"],
+                     uid))
+                db.execute(
+                    "UPDATE users SET referred_by=? WHERE id=?", (referrer["id"], uid))
                 db.commit()
                 _check_referral_rewards(referrer["id"], db)
         # Schedule email sequence
         for day in [1, 3, 7]:
-            db.execute("INSERT INTO email_sequences (user_id, day) VALUES (?,?)", (uid, day))
+            pass
+            db.execute(
+                "INSERT INTO email_sequences (user_id, day) VALUES (?,?)", (uid, day))
         db.commit()
         token = make_token(uid)
         session["token"] = token
@@ -864,61 +1202,89 @@ def register():
                 Go to Dashboard →
             </a>
             </div>""")
-        onboarding_done = bool(user["onboarding_complete"]) if "onboarding_complete" in user.keys() else False
-        return jsonify({"token": token, "redirect": "/dashboard" if onboarding_done else "/onboarding"})
+        onboarding_done = bool(
+            user["onboarding_complete"]) if "onboarding_complete" in user.keys() else False
+        return jsonify(
+            {"token": token, "redirect": "/dashboard" if onboarding_done else "/onboarding"})
     except sqlite3.IntegrityError:
+        pass
         return jsonify({"error": "Email already registered"}), 400
     except Exception as e:
-        import traceback; traceback.print_exc()
+        pass
+        import traceback
+        traceback.print_exc()
         print(f"[REGISTER ERROR] {e}")
-        return jsonify({"error": "Internal server error", "detail": str(e)}), 500
+        return jsonify(
+            {"error": "Internal server error", "detail": str(e)}), 500
     finally:
-            pass
+        pass
+        pass
+
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
+    pass
     try:
-        d        = request.get_json() or {}
+        pass
+        pass
+        d = request.get_json() or {}
         print(f"[LOGIN] Raw payload: {d}")
-        email    = d.get("email", "").strip().lower()
+        email = d.get("email", "").strip().lower()
         password = d.get("password", "")
         print(f"[LOGIN] email={email!r} password_set={bool(password)}")
-        db   = get_db()
-        user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        db = get_db()
+        user = db.execute(
+            "SELECT * FROM users WHERE email=?", (email,)).fetchone()
         if user and not check_pw(password, user["password_hash"]):
+            pass
             user = None
         if not user:
+            pass
             print(f"[LOGIN] No user found for email={email!r}")
             return jsonify({"error": "Invalid email or password"}), 401
-        print(f"[LOGIN] Success for user_id={user['id']} is_admin={user['is_admin']}")
+        print(
+            f"[LOGIN] Success for user_id={user['id']} is_admin={user['is_admin']}")
         token = make_token(user["id"], bool(user["is_admin"]))
         session["token"] = token
-        return jsonify({"token": token, "redirect": "/admin" if user["is_admin"] else "/dashboard"})
+        return jsonify(
+            {"token": token, "redirect": "/admin" if user["is_admin"] else "/dashboard"})
     except Exception as e:
-        import traceback; traceback.print_exc()
+        pass
+        import traceback
+        traceback.print_exc()
         print(f"[LOGIN ERROR] {e}")
-        return jsonify({"error": "Internal server error", "detail": str(e)}), 500
+        return jsonify(
+            {"error": "Internal server error", "detail": str(e)}), 500
+
 
 @app.route("/api/auth/logout", methods=["POST"])
 @app.route("/api/logout", methods=["POST"])
 def logout():
+    pass
     session.clear()
     return jsonify({"status": "ok"})
 
+
 @app.route("/api/auth/forgot-password", methods=["POST"])
 def forgot_password():
-    d     = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     email = d.get("email", "").strip().lower()
-    db    = get_db()
-    user  = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
     if user:
-        token   = secrets.token_urlsafe(32)
+        pass
+        token = secrets.token_urlsafe(32)
         expires = int(time.time()) + 3600
-        db.execute("UPDATE users SET reset_token=?, reset_expires=? WHERE email=?",
-                   (token, expires, email))
+        db.execute(
+            "UPDATE users SET reset_token=?, reset_expires=? WHERE email=?",
+            (token,
+             expires,
+             email))
         db.commit()
         link = f"{APP_URL}/reset-password?token={token}"
-        send_email(email, user["full_name"], "Reset your FinanceFlow password", f"""
+        send_email(
+            email, user["full_name"], "Reset your FinanceFlow password", f"""
             <div style="font-family:sans-serif;max-width:600px;margin:auto">
             <h2 style="color:#4F46E5">Password Reset</h2>
             <p>Click below to reset your password. Expires in 1 hour.</p>
@@ -926,70 +1292,95 @@ def forgot_password():
                 Reset Password →
             </a>
             </div>""")
-    return jsonify({"status": "If that email exists, a reset link has been sent"})
+    return jsonify(
+        {"status": "If that email exists, a reset link has been sent"})
+
 
 @app.route("/api/auth/reset-password", methods=["POST"])
 def do_reset_password():
-    d        = request.get_json() or {}
-    token    = d.get("token", "")
+    pass
+    d = request.get_json() or {}
+    token = d.get("token", "")
     new_pass = d.get("password", "")
     if not new_pass or len(new_pass) < 6:
-        return jsonify({"error": "Password must be at least 6 characters"}), 400
-    db   = get_db()
+        pass
+        return jsonify(
+            {"error": "Password must be at least 6 characters"}), 400
+    db = get_db()
     user = db.execute("SELECT * FROM users WHERE reset_token=? AND reset_expires>?",
                       (token, int(time.time()))).fetchone()
     if not user:
+        pass
         return jsonify({"error": "Invalid or expired reset link"}), 400
-    db.execute("UPDATE users SET password_hash=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
-               (hash_pw(new_pass), user["id"]))
+    db.execute(
+        "UPDATE users SET password_hash=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
+        (hash_pw(new_pass),
+         user["id"]))
     return jsonify({"status": "Password updated successfully"})
+
 
 @app.route("/api/auth/me")
 @login_required
 def me():
-    db   = get_db()
-    user = db.execute("SELECT id, email, full_name, plan, created_at FROM users WHERE id=?",
-                      (request.uid,)).fetchone()
-    return jsonify(dict(user)) if user else (jsonify({"error": "Not found"}), 404)
+    pass
+    db = get_db()
+    user = db.execute(
+        "SELECT id, email, full_name, plan, created_at FROM users WHERE id=?",
+        (request.uid,
+         )).fetchone()
+    return jsonify(dict(user)) if user else (
+        jsonify({"error": "Not found"}), 404)
 
-# ── YouTube OAuth ─────────────────────────────────────────────────────────────
+# ── YouTube OAuth ───────────────────────────────────────────────────────
+
+
 @app.route("/api/channels/connect")
 @login_required
 def channel_connect():
+    pass
     state = f"{request.uid}:{secrets.token_hex(16)}"
     session["oauth_state"] = state
     params = urllib.parse.urlencode({
-        "client_id":     CLIENT_ID,
-        "redirect_uri":  REDIRECT_URI,
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
         "response_type": "code",
-        "scope":         ("https://www.googleapis.com/auth/youtube.upload "
-                          "https://www.googleapis.com/auth/youtube.readonly"),
-        "access_type":   "offline",
-        "prompt":        "consent",
-        "state":         state,
+        "scope": ("https://www.googleapis.com/auth/youtube.upload "
+                  "https://www.googleapis.com/auth/youtube.readonly"),
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
     })
     return redirect(f"https://accounts.google.com/o/oauth2/auth?{params}")
 
+
 @app.route("/api/channels/callback")
 def channel_callback():
-    code  = request.args.get("code", "")
+    pass
+    code = request.args.get("code", "")
     state = request.args.get("state", "")
     error = request.args.get("error", "")
     if error:
+        pass
         return redirect(f"/dashboard?error={urllib.parse.quote(error)}")
     if not code:
+        pass
         return redirect("/dashboard?error=no_code")
     try:
+        pass
+        pass
         user_id = int(state.split(":")[0])
     except Exception:
+        pass
         return redirect("/dashboard?error=invalid_state")
     try:
+        pass
+        pass
         data = urllib.parse.urlencode({
-            "code":          code,
-            "client_id":     CLIENT_ID,
+            "code": code,
+            "client_id": CLIENT_ID,
             "client_secret": CLIENT_SECRET,
-            "redirect_uri":  REDIRECT_URI,
-            "grant_type":    "authorization_code",
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
         }).encode()
         req = urllib.request.Request(
             "https://oauth2.googleapis.com/token", data=data,
@@ -998,6 +1389,7 @@ def channel_callback():
         with urllib.request.urlopen(req) as r:
             tokens = json.loads(r.read())
     except urllib.error.HTTPError as e:
+        pass
         error_body = e.read().decode("utf-8", errors="replace")
         print(f"[OAUTH] Token exchange HTTP error: {e.code} {e.reason}")
         print(f"[OAUTH] Google response body: {error_body}")
@@ -1005,134 +1397,200 @@ def channel_callback():
         print(f"[OAUTH] client_id used: {CLIENT_ID}")
         return redirect("/dashboard?error=token_exchange_failed")
     except Exception as e:
+        pass
         print(f"[OAUTH] Token exchange failed: {e}")
         print(f"[OAUTH] redirect_uri used: {REDIRECT_URI}")
         print(f"[OAUTH] client_id used: {CLIENT_ID}")
         return redirect("/dashboard?error=token_exchange_failed")
-    access_token  = tokens.get("access_token", "")
+    access_token = tokens.get("access_token", "")
     refresh_token = tokens.get("refresh_token", "")
-    channel_name  = "My Channel"
+    channel_name = "My Channel"
     yt_channel_id = ""
     sub_count = view_count = vid_count = 0
     profile_pic = ""
     try:
+        pass
+        pass
         yt_req = urllib.request.Request(
             "https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
+            headers={
+                "Authorization": f"Bearer {access_token}"})
         with urllib.request.urlopen(yt_req) as r:
             yt_data = json.loads(r.read())
-        item          = yt_data["items"][0]
-        channel_name  = item["snippet"]["title"]
+        item = yt_data["items"][0]
+        channel_name = item["snippet"]["title"]
         yt_channel_id = item["id"]
-        profile_pic   = item["snippet"].get("thumbnails", {}).get("default", {}).get("url", "")
-        stats         = item.get("statistics", {})
-        sub_count     = int(stats.get("subscriberCount", 0))
-        view_count    = int(stats.get("viewCount", 0))
-        vid_count     = int(stats.get("videoCount", 0))
+        profile_pic = item["snippet"].get(
+            "thumbnails",
+            {}).get(
+            "default",
+            {}).get(
+            "url",
+            "")
+        stats = item.get("statistics", {})
+        sub_count = int(stats.get("subscriberCount", 0))
+        view_count = int(stats.get("viewCount", 0))
+        vid_count = int(stats.get("videoCount", 0))
     except Exception as e:
+        pass
         print(f"[OAUTH] YouTube channel fetch failed: {e}")
-    db       = get_db()
-    existing = db.execute("SELECT id FROM channels WHERE youtube_channel_id=? AND user_id=?",
-                          (yt_channel_id, user_id)).fetchone()
+    db = get_db()
+    existing = db.execute(
+        "SELECT id FROM channels WHERE youtube_channel_id=? AND user_id=?",
+        (yt_channel_id,
+         user_id)).fetchone()
     if existing:
+        pass
         db.execute(
             "UPDATE channels SET refresh_token=?, access_token=?, active=1, "
             "subscriber_count=?, view_count=?, video_count=?, profile_picture_url=? WHERE id=?",
-            (refresh_token, access_token, sub_count, view_count, vid_count, profile_pic, existing["id"])
-        )
+            (refresh_token,
+             access_token,
+             sub_count,
+             view_count,
+             vid_count,
+             profile_pic,
+             existing["id"]))
     else:
+        pass
         db.execute(
             "INSERT INTO channels (user_id, channel_name, youtube_channel_id, refresh_token, access_token, "
             "subscriber_count, view_count, video_count, profile_picture_url) VALUES (?,?,?,?,?,?,?,?,?)",
-            (user_id, channel_name, yt_channel_id, refresh_token, access_token,
-             sub_count, view_count, vid_count, profile_pic)
-        )
+            (user_id,
+             channel_name,
+             yt_channel_id,
+             refresh_token,
+             access_token,
+             sub_count,
+             view_count,
+             vid_count,
+             profile_pic))
     db.commit()
     token = make_token(user_id)
     session["token"] = token
     return redirect("/dashboard?connected=1")
 
-# ── Channel API ───────────────────────────────────────────────────────────────
+# ── Channel API ─────────────────────────────────────────────────────────
+
+
 @app.route("/api/channels")
 @login_required
 def get_channels():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT id, channel_name, youtube_channel_id, niche, video_type, schedule, videos_uploaded, created_at "
-        "FROM channels WHERE user_id=? AND active=1 ORDER BY created_at DESC", (request.uid,)
-    ).fetchall()
+        "FROM channels WHERE user_id=? AND active=1 ORDER BY created_at DESC", (request.uid,)).fetchall()
     return jsonify([dict(r) for r in rows])
+
 
 @app.route("/api/channels/<int:cid>", methods=["PUT"])
 @login_required
 def update_channel(cid):
-    d  = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     db = get_db()
-    db.execute("UPDATE channels SET niche=?, video_type=?, schedule=? WHERE id=? AND user_id=?",
-               (d.get("niche"), d.get("video_type"), d.get("schedule"), cid, request.uid))
+    db.execute(
+        "UPDATE channels SET niche=?, video_type=?, schedule=? WHERE id=? AND user_id=?",
+        (d.get("niche"),
+         d.get("video_type"),
+         d.get("schedule"),
+         cid,
+         request.uid))
     return jsonify({"status": "updated"})
+
 
 @app.route("/api/channels/<int:cid>/sync", methods=["POST"])
 @login_required
 def sync_channel(cid):
+    pass
     db = get_db()
     ch = db.execute("SELECT * FROM channels WHERE id=? AND user_id=?",
                     (cid, request.uid)).fetchone()
     if not ch:
+        pass
     try:
+        pass
+        pass
         pass
         from worker import refresh_yt_token
         token = refresh_yt_token(ch["refresh_token"])
         yt_req = urllib.request.Request(
             "https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true",
-            headers={"Authorization": f"Bearer {token}"}
-        )
+            headers={
+                "Authorization": f"Bearer {token}"})
         with urllib.request.urlopen(yt_req) as r:
             yt_data = json.loads(r.read())
         item = yt_data["items"][0]
         stats = item.get("statistics", {})
-        pic   = item["snippet"].get("thumbnails", {}).get("default", {}).get("url", "")
+        pic = item["snippet"].get(
+            "thumbnails",
+            {}).get(
+            "default",
+            {}).get(
+            "url",
+            "")
         db.execute(
-            "UPDATE channels SET subscriber_count=?, view_count=?, video_count=?, profile_picture_url=? WHERE id=?",
-            (int(stats.get("subscriberCount", 0)), int(stats.get("viewCount", 0)),
-             int(stats.get("videoCount", 0)), pic, cid)
-        )
-        return jsonify({"success": True, "subscriber_count": int(stats.get("subscriberCount", 0))})
+            "UPDATE channels SET subscriber_count=?, view_count=?, video_count=?, profile_picture_url=? WHERE id=?", (int(
+                stats.get(
+                    "subscriberCount", 0)), int(
+                stats.get(
+                    "viewCount", 0)), int(
+                        stats.get(
+                            "videoCount", 0)), pic, cid))
+        return jsonify({"success": True, "subscriber_count": int(
+            stats.get("subscriberCount", 0))})
     except Exception as e:
+        pass
+
 
 @app.route("/api/channels/<int:cid>", methods=["DELETE"])
 @login_required
 def delete_channel(cid):
+    pass
     db = get_db()
-    db.execute("UPDATE channels SET active=0 WHERE id=? AND user_id=?", (cid, request.uid))
+    db.execute(
+        "UPDATE channels SET active=0 WHERE id=? AND user_id=?",
+        (cid,
+         request.uid))
     return jsonify({"status": "deleted"})
 
-# ── Video / Queue API ─────────────────────────────────────────────────────────
+# ── Video / Queue API ───────────────────────────────────────────────────
+
+
 @app.route("/api/videos/generate", methods=["POST"])
 @login_required
 def generate_video():
-    d             = request.get_json() or {}
-    channel_id    = d.get("channel_id")
-    niche         = d.get("niche", "personal_finance")
-    video_type    = d.get("video_type", "short")
+    pass
+    d = request.get_json() or {}
+    channel_id = d.get("channel_id")
+    niche = d.get("niche", "personal_finance")
+    video_type = d.get("video_type", "short")
     custom_prompt = d.get("custom_prompt", "")
-    custom_title  = d.get("custom_title", "")
+    custom_title = d.get("custom_title", "")
     db = get_db()
     ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?",
                     (channel_id, request.uid)).fetchone()
     if not ch:
+        pass
         return jsonify({"error": "Channel not found"}), 404
     # Server-side plan gating
-    user_row = db.execute("SELECT plan, COALESCE(trial_ends_at,0) AS trial_ends_at FROM users WHERE id=?",
-                          (request.uid,)).fetchone()
+    user_row = db.execute(
+        "SELECT plan, COALESCE(trial_ends_at,0) AS trial_ends_at FROM users WHERE id=?",
+        (request.uid,
+         )).fetchone()
     plan_key = user_row["plan"] if user_row else "starter"
-    trial_active = int(user_row["trial_ends_at"] or 0) > int(time.time()) if user_row else False
-    effective_plan = "pro" if (trial_active and plan_key == "starter") else plan_key
+    trial_active = int(
+        user_row["trial_ends_at"] or 0) > int(
+        time.time()) if user_row else False
+    effective_plan = "pro" if (
+        trial_active and plan_key == "starter") else plan_key
     limits = PLANS.get(effective_plan, PLANS["starter"])
     if not limits.get("custom_prompts") and custom_prompt:
+        pass
         return jsonify({"error": "Custom prompts require Pro plan"}), 403
     if limits["videos_per_week"] < 999:
+        pass
         from datetime import datetime, timedelta
         week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
         week_count = db.execute(
@@ -1140,133 +1598,182 @@ def generate_video():
             (request.uid, week_ago)
         ).fetchone()[0]
         if week_count >= limits["videos_per_week"]:
-            return jsonify({"error": f"Weekly limit of {limits['videos_per_week']} videos reached. Upgrade to generate more."}), 429
+            pass
+            return jsonify(
+                {"error": f"Weekly limit of {limits['videos_per_week']} videos reached. Upgrade to generate more."}), 429
     job_id = db.execute(
         "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_prompt, custom_title) VALUES (?,?,?,?,?,?)",
         (request.uid, channel_id, video_type, niche, custom_prompt, custom_title)
     ).lastrowid
     if celery_app:
+        pass
         process_video_task.delay(job_id)
-        return jsonify({"success": True, "job_id": job_id, "status": "queued", "queue": "celery"})
-    return jsonify({"success": True, "job_id": job_id, "status": "queued", "queue": "sqlite"})
+        return jsonify({"success": True, "job_id": job_id,
+                       "status": "queued", "queue": "celery"})
+    return jsonify({"success": True, "job_id": job_id,
+                   "status": "queued", "queue": "sqlite"})
+
 
 @app.route("/api/videos/generate-script", methods=["POST"])
 @login_required
 def generate_script_api():
+    pass
     """Generate a video script without queuing a full job."""
-    d          = request.get_json() or {}
-    prompt     = d.get("prompt", "")
-    niche      = d.get("niche", "personal_finance")
+    d = request.get_json() or {}
+    prompt = d.get("prompt", "")
+    niche = d.get("niche", "personal_finance")
     video_type = d.get("video_type", "short")
     if not prompt and not niche:
+        pass
         return jsonify({"error": "Provide prompt or niche"}), 400
     script = generate_script(prompt, niche, video_type)
     return jsonify({
-        "script":     script,
-        "provider":   "openai" if (OPENAI_KEY and HAS_OPENAI) else "built-in",
-        "niche":      niche,
+        "script": script,
+        "provider": "openai" if (OPENAI_KEY and HAS_OPENAI) else "built-in",
+        "niche": niche,
         "video_type": video_type,
     })
+
 
 @app.route("/api/videos/queue")
 @login_required
 def get_queue():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT q.*, c.channel_name FROM queue q LEFT JOIN channels c ON q.channel_id=c.id "
-        "WHERE q.user_id=? ORDER BY q.created_at DESC LIMIT 30", (request.uid,)
-    ).fetchall()
+        "WHERE q.user_id=? ORDER BY q.created_at DESC LIMIT 30", (request.uid,)).fetchall()
     return jsonify([dict(r) for r in rows])
+
 
 @app.route("/api/videos/status/<int:job_id>")
 @login_required
 def job_status(job_id):
-    db  = get_db()
+    pass
+    db = get_db()
     job = db.execute("SELECT * FROM queue WHERE id=? AND user_id=?",
                      (job_id, request.uid)).fetchone()
-    return jsonify(dict(job)) if job else (jsonify({"error": "Not found"}), 404)
+    return jsonify(dict(job)) if job else (
+        jsonify({"error": "Not found"}), 404)
+
 
 @app.route("/api/videos")
 @login_required
 def get_videos():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT v.*, c.channel_name FROM videos v LEFT JOIN channels c ON v.channel_id=c.id "
-        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50", (request.uid,)
-    ).fetchall()
+        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50", (request.uid,)).fetchall()
     return jsonify([dict(r) for r in rows])
 
-# ── Social API ────────────────────────────────────────────────────────────────
+# ── Social API ──────────────────────────────────────────────────────────
+
+
 @app.route("/api/social/<int:cid>")
 @login_required
 def get_social(cid):
-    db   = get_db()
-    rows = db.execute("SELECT id, platform, active FROM social_accounts WHERE channel_id=?",
-                      (cid,)).fetchall()
+    pass
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, platform, active FROM social_accounts WHERE channel_id=?",
+        (cid,
+         )).fetchall()
     return jsonify([dict(r) for r in rows])
+
 
 @app.route("/api/social/<int:cid>", methods=["POST"])
 @login_required
 def save_social(cid):
-    d           = request.get_json() or {}
-    platform    = d.get("platform")
+    pass
+    d = request.get_json() or {}
+    platform = d.get("platform")
     credentials = json.dumps(d.get("credentials", {}))
     db = get_db()
-    ex = db.execute("SELECT id FROM social_accounts WHERE channel_id=? AND platform=?",
-                    (cid, platform)).fetchone()
+    ex = db.execute(
+        "SELECT id FROM social_accounts WHERE channel_id=? AND platform=?",
+        (cid,
+         platform)).fetchone()
     if ex:
-        db.execute("UPDATE social_accounts SET credentials=?, active=1 WHERE id=?",
-                   (credentials, ex["id"]))
+        pass
+        db.execute(
+            "UPDATE social_accounts SET credentials=?, active=1 WHERE id=?",
+            (credentials,
+             ex["id"]))
     else:
-        db.execute("INSERT INTO social_accounts (channel_id, platform, credentials) VALUES (?,?,?)",
-                   (cid, platform, credentials))
+        pass
+        db.execute(
+            "INSERT INTO social_accounts (channel_id, platform, credentials) VALUES (?,?,?)",
+            (cid,
+             platform,
+             credentials))
     return jsonify({"status": "saved"})
 
-# ── Prompts API ───────────────────────────────────────────────────────────────
+# ── Prompts API ─────────────────────────────────────────────────────────
+
+
 @app.route("/api/prompts", methods=["GET"])
 @login_required
 def get_prompts():
-    db   = get_db()
-    rows = db.execute("SELECT * FROM prompts WHERE user_id=? ORDER BY created_at DESC",
-                      (request.uid,)).fetchall()
+    pass
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM prompts WHERE user_id=? ORDER BY created_at DESC",
+        (request.uid,
+         )).fetchall()
     return jsonify([dict(r) for r in rows])
+
 
 @app.route("/api/prompts", methods=["POST"])
 @login_required
 def create_prompt():
-    d     = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     title = d.get("title", "").strip()
-    body  = d.get("body", "").strip()
+    body = d.get("body", "").strip()
     niche = d.get("niche", "personal_finance")
     if not title or not body:
+        pass
         return jsonify({"error": "Title and body required"}), 400
-    db  = get_db()
+    db = get_db()
     pid = db.execute(
         "INSERT INTO prompts (user_id, title, body, niche) VALUES (?,?,?,?)",
         (request.uid, title, body, niche)
     ).lastrowid
     return jsonify({"success": True, "id": pid})
 
+
 @app.route("/api/prompts/<int:pid>", methods=["DELETE"])
 @login_required
 def delete_prompt(pid):
+    pass
     db = get_db()
-    db.execute("DELETE FROM prompts WHERE id=? AND user_id=?", (pid, request.uid))
+    db.execute("DELETE FROM prompts WHERE id=? AND user_id=?",
+               (pid, request.uid))
     return jsonify({"success": True})
 
-# ── Referral API ───────────────────────────────────────────────────────────────
+# ── Referral API ────────────────────────────────────────────────────────
+
+
 @app.route("/api/referral/stats")
 @login_required
 def referral_stats():
-    db    = get_db()
-    user  = db.execute("SELECT referral_code FROM users WHERE id=?", (request.uid,)).fetchone()
-    count = db.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id=?", (request.uid,)).fetchone()[0]
+    pass
+    db = get_db()
+    user = db.execute(
+        "SELECT referral_code FROM users WHERE id=?",
+        (request.uid,
+         )).fetchone()
+    count = db.execute(
+        "SELECT COUNT(*) FROM referrals WHERE referrer_id=?",
+        (request.uid,
+         )).fetchone()[0]
     code = user["referral_code"] if user else ""
     tiers = [
-        {"threshold": 1,  "reward": "1 week Pro",     "reached": count >= 1},
-        {"threshold": 3,  "reward": "1 month Pro",    "reached": count >= 3},
-        {"threshold": 10, "reward": "3 months Agency","reached": count >= 10},
-        {"threshold": 25, "reward": "Lifetime Pro",   "reached": count >= 25},
+        {"threshold": 1, "reward": "1 week Pro", "reached": count >= 1},
+        {"threshold": 3, "reward": "1 month Pro", "reached": count >= 3},
+        {"threshold": 10, "reward": "3 months Agency", "reached": count >= 10},
+        {"threshold": 25, "reward": "Lifetime Pro", "reached": count >= 25},
     ]
     return jsonify({
         "referral_code": code,
@@ -1276,34 +1783,58 @@ def referral_stats():
         "next_tier": next((t for t in tiers if not t["reached"]), None),
     })
 
-# ── Promotions API ─────────────────────────────────────────────────────────────
+# ── Promotions API ──────────────────────────────────────────────────────
+
+
 @app.route("/api/promotions/submit", methods=["POST"])
 @login_required
 def submit_promotion():
-    d         = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     tweet_url = d.get("tweet_url", "").strip()
     if not tweet_url or "twitter.com" not in tweet_url and "x.com" not in tweet_url:
+        pass
         return jsonify({"error": "Valid tweet URL required"}), 400
     db = get_db()
     existing = db.execute(
-        "SELECT id FROM promotions WHERE user_id=? AND status='pending'", (request.uid,)
-    ).fetchone()
+        "SELECT id FROM promotions WHERE user_id=? AND status='pending'",
+        (request.uid,
+         )).fetchone()
     if existing:
-        return jsonify({"error": "You already have a pending promotion review"}), 400
+        pass
+        return jsonify(
+            {"error": "You already have a pending promotion review"}), 400
     db.execute("INSERT INTO promotions (user_id, tweet_url) VALUES (?,?)",
                (request.uid, tweet_url))
-    return jsonify({"success": True, "message": "Submitted! Admin will review within 48h."})
+    return jsonify(
+        {"success": True, "message": "Submitted! Admin will review within 48h."})
 
-# ── Stats API ─────────────────────────────────────────────────────────────────
+# ── Stats API ───────────────────────────────────────────────────────────
+
+
 @app.route("/api/stats")
 @login_required
 def stats():
-    db         = get_db()
-    channels   = db.execute("SELECT COUNT(*) FROM channels WHERE user_id=? AND active=1", (request.uid,)).fetchone()[0]
-    uploaded   = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'", (request.uid,)).fetchone()[0]
-    pending    = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'", (request.uid,)).fetchone()[0]
-    processing = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='processing'", (request.uid,)).fetchone()[0]
-    user       = db.execute("SELECT plan FROM users WHERE id=?", (request.uid,)).fetchone()
+    pass
+    db = get_db()
+    channels = db.execute(
+        "SELECT COUNT(*) FROM channels WHERE user_id=? AND active=1",
+        (request.uid,
+         )).fetchone()[0]
+    uploaded = db.execute(
+        "SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'",
+        (request.uid,
+         )).fetchone()[0]
+    pending = db.execute(
+        "SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'",
+        (request.uid,
+         )).fetchone()[0]
+    processing = db.execute(
+        "SELECT COUNT(*) FROM queue WHERE user_id=? AND status='processing'",
+        (request.uid,
+         )).fetchone()[0]
+    user = db.execute("SELECT plan FROM users WHERE id=?",
+                      (request.uid,)).fetchone()
     plan = user["plan"] if user else "starter"
     return jsonify({
         "channels": channels, "videos_uploaded": uploaded,
@@ -1311,80 +1842,110 @@ def stats():
         "plan": plan, "plan_limits": PLANS.get(plan, PLANS["starter"]),
     })
 
-# ── Payment API ───────────────────────────────────────────────────────────────
+# ── Payment API ─────────────────────────────────────────────────────────
+
+
 @app.route("/api/payments/request", methods=["POST"])
 @login_required
 def payment_request():
+    pass
     """User requests a plan upgrade — creates pending payment record."""
-    d        = request.get_json() or {}
-    plan     = d.get("plan", "")
+    d = request.get_json() or {}
+    plan = d.get("plan", "")
     provider = d.get("provider") or d.get("payment_method", "manual")
     reference = d.get("reference", "")
     if plan not in PLANS or PLANS[plan]["price"] == 0:
+        pass
         return jsonify({"error": "Invalid plan or plan is free"}), 400
     amount = PLANS[plan]["price"]
-    db     = get_db()
-    db.execute("UPDATE payments SET status='cancelled' WHERE user_id=? AND status='pending'",
-               (request.uid,))
+    db = get_db()
+    db.execute(
+        "UPDATE payments SET status='cancelled' WHERE user_id=? AND status='pending'",
+        (request.uid,
+         ))
     payment_id = db.execute(
         "INSERT INTO payments (user_id, amount, plan, provider, payment_method, reference, status) VALUES (?,?,?,?,?,?,'pending')",
         (request.uid, amount, plan, provider, provider, reference)
     ).lastrowid
     if reference:
+        pass
         db2 = get_db()
-        db2.execute("UPDATE payments SET status='submitted', reference=? WHERE id=?", (reference, payment_id))
-        db2.commit(); db2.close()
+        db2.execute(
+            "UPDATE payments SET status='submitted', reference=? WHERE id=?",
+            (reference,
+             payment_id))
+        db2.commit()
+        db2.close()
     resp = {
         "success": True,
-        "payment_id": payment_id, "plan": plan,
-        "amount": amount, "provider": provider,
+        "payment_id": payment_id,
+        "plan": plan,
+        "amount": amount,
+        "provider": provider,
         "status": "submitted" if reference else "pending",
         "message": "Payment request submitted. Admin will review within 24h." if reference else "Payment created.",
     }
     if provider == "stripe" and HAS_STRIPE and STRIPE_KEY:
+        pass
         resp["instructions"] = "Use /api/payments/stripe-checkout to get a Stripe checkout URL"
     elif provider == "jazzcash":
+        pass
         resp["instructions"] = f"Send PKR {amount * 280:.0f} to our JazzCash account and submit reference via /api/payments/manual"
     elif provider == "easypaisa":
+        pass
         resp["instructions"] = f"Send PKR {amount * 280:.0f} to our EasyPaisa account and submit reference via /api/payments/manual"
     elif provider == "razorpay":
+        pass
         resp["instructions"] = "Integrate with Razorpay order creation and submit reference via /api/payments/manual"
     else:
+        pass
         resp["instructions"] = f"Transfer ${amount} via bank/wire and submit reference number via /api/payments/manual"
     return jsonify(resp)
+
 
 @app.route("/api/payments/manual", methods=["POST"])
 @login_required
 def payment_manual():
+    pass
     """User submits bank transfer / JazzCash / EasyPaisa reference number."""
-    d          = request.get_json() or {}
-    reference  = d.get("reference", "").strip()
+    d = request.get_json() or {}
+    reference = d.get("reference", "").strip()
     payment_id = d.get("payment_id")
-    notes      = d.get("notes", "")
+    notes = d.get("notes", "")
     if not reference:
+        pass
         return jsonify({"error": "Reference number required"}), 400
-    db      = get_db()
+    db = get_db()
     payment = None
     if payment_id:
+        pass
         payment = db.execute(
             "SELECT * FROM payments WHERE id=? AND user_id=? AND status='pending'",
             (payment_id, request.uid)
         ).fetchone()
     if not payment:
+        pass
         payment = db.execute(
             "SELECT * FROM payments WHERE user_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1",
             (request.uid,)
         ).fetchone()
     if not payment:
-        return jsonify({"error": "No pending payment found. Use /api/payments/request first"}), 404
+        pass
+        return jsonify(
+            {"error": "No pending payment found. Use /api/payments/request first"}), 404
     db.execute(
         "UPDATE payments SET reference=?, notes=?, status='submitted', updated_at=CURRENT_TIMESTAMP WHERE id=?",
         (reference, notes, payment["id"])
     )
     db.commit()
-    admin = db.execute("SELECT email FROM users WHERE is_admin=1 LIMIT 1").fetchone()
-    user  = db.execute("SELECT email, full_name FROM users WHERE id=?", (request.uid,)).fetchone()
+    admin = db.execute(
+        "SELECT email FROM users WHERE is_admin=1 LIMIT 1").fetchone()
+    user = db.execute(
+        "SELECT email, full_name FROM users WHERE id=?",
+        (request.uid,
+         )).fetchone()
     if admin:
+        pass
         send_email(
             admin["email"], "Admin",
             f"💰 New payment submission — {payment['plan']} plan",
@@ -1399,16 +1960,18 @@ def payment_manual():
             </a></div>"""
         )
     return jsonify({
-        "status":     "submitted",
-        "message":    "Reference submitted. Admin will review within 24h.",
+        "status": "submitted",
+        "message": "Reference submitted. Admin will review within 24h.",
         "payment_id": payment["id"],
     })
+
 
 @app.route("/api/payments/status")
 @login_required
 def payment_status():
+    pass
     """User checks their payment history and status."""
-    db   = get_db()
+    db = get_db()
     rows = db.execute(
         "SELECT id, amount, plan, provider, status, reference, created_at, updated_at "
         "FROM payments WHERE user_id=? ORDER BY created_at DESC LIMIT 10",
@@ -1416,25 +1979,32 @@ def payment_status():
     ).fetchall()
     return jsonify({"payments": [dict(r) for r in rows]})
 
+
 @app.route("/api/payments/stripe-checkout", methods=["POST"])
 @login_required
 def stripe_checkout():
+    pass
     """Create a Stripe Checkout Session for subscription."""
     if not HAS_STRIPE or not STRIPE_KEY:
-        return jsonify({"error": "Stripe not configured — set STRIPE_SECRET_KEY"}), 503
-    d    = request.get_json() or {}
+        pass
+        return jsonify(
+            {"error": "Stripe not configured — set STRIPE_SECRET_KEY"}), 503
+    d = request.get_json() or {}
     plan = d.get("plan", "pro")
     if plan not in PLANS or PLANS[plan]["price"] == 0:
+        pass
         return jsonify({"error": "Invalid plan"}), 400
     try:
+        pass
+        pass
         sess = stripe_lib.checkout.Session.create(
             payment_method_types=["card"],
             line_items=[{
                 "price_data": {
-                    "currency":     "usd",
+                    "currency": "usd",
                     "product_data": {"name": f"FinanceFlow {PLANS[plan]['name']} Plan"},
-                    "recurring":    {"interval": "month"},
-                    "unit_amount":  PLANS[plan]["price"] * 100,
+                    "recurring": {"interval": "month"},
+                    "unit_amount": PLANS[plan]["price"] * 100,
                 },
                 "quantity": 1,
             }],
@@ -1445,42 +2015,67 @@ def stripe_checkout():
         )
         return jsonify({"checkout_url": sess.url, "session_id": sess.id})
     except Exception as e:
+        pass
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/payments/stripe-webhook", methods=["POST"])
 def stripe_webhook():
+    pass
     """Stripe webhook — verifies signature, upgrades/downgrades plan."""
     payload = request.get_data()
-    sig     = request.headers.get("Stripe-Signature", "")
-    event   = None
+    sig = request.headers.get("Stripe-Signature", "")
+    event = None
     if HAS_STRIPE and STRIPE_WH_SECRET:
+        pass
         try:
-            event = stripe_lib.Webhook.construct_event(payload, sig, STRIPE_WH_SECRET)
+            pass
+            pass
+            event = stripe_lib.Webhook.construct_event(
+                payload, sig, STRIPE_WH_SECRET)
         except stripe_lib.error.SignatureVerificationError:
+            pass
             return jsonify({"error": "Invalid signature"}), 400
     else:
+        pass
         try:
+            pass
+            pass
             event = json.loads(payload)
         except Exception:
+            pass
             return jsonify({"error": "Invalid payload"}), 400
     etype = event.get("type", "")
     print(f"[STRIPE WEBHOOK] {etype}")
     if etype == "checkout.session.completed":
-        sess    = event["data"]["object"]
+        pass
+        sess = event["data"]["object"]
         user_id = int(sess.get("metadata", {}).get("user_id", 0))
-        plan    = sess.get("metadata", {}).get("plan", "pro")
-        sub_id  = sess.get("subscription", "")
+        plan = sess.get("metadata", {}).get("plan", "pro")
+        sub_id = sess.get("subscription", "")
         if user_id:
+            pass
             db = get_db()
-            db.execute("UPDATE users SET plan=?, stripe_subscription_id=? WHERE id=?",
-                       (plan, sub_id, user_id))
+            db.execute(
+                "UPDATE users SET plan=?, stripe_subscription_id=? WHERE id=?",
+                (plan,
+                 sub_id,
+                 user_id))
             db.execute(
                 "INSERT INTO payments (user_id, amount, plan, provider, status, reference) VALUES (?,?,?,'stripe','approved',?)",
-                (user_id, PLANS.get(plan, {}).get("price", 0), plan, sub_id)
-            )
+                (user_id,
+                 PLANS.get(
+                     plan,
+                     {}).get(
+                     "price",
+                     0),
+                    plan,
+                    sub_id))
             db.commit()
-            user = db.execute("SELECT email, full_name FROM users WHERE id=?", (user_id,)).fetchone()
+            user = db.execute(
+                "SELECT email, full_name FROM users WHERE id=?", (user_id,)).fetchone()
             if user:
+                pass
                 send_email(
                     user["email"], user["full_name"],
                     f"✅ You're now on FinanceFlow {plan.title()}!",
@@ -1492,17 +2087,23 @@ def stripe_webhook():
                     </a></div>"""
                 )
     elif etype in ("customer.subscription.deleted", "invoice.payment_failed"):
+        pass
         sub_id = event["data"]["object"].get("id", "")
         if sub_id:
+            pass
             db = get_db()
-            db.execute("UPDATE users SET plan='starter' WHERE stripe_subscription_id=?", (sub_id,))
+            db.execute(
+                "UPDATE users SET plan='starter' WHERE stripe_subscription_id=?", (sub_id,))
     return jsonify({"status": "ok"})
 
-# ── Admin payment API ─────────────────────────────────────────────────────────
+# ── Admin payment API ───────────────────────────────────────────────────
+
+
 @app.route("/api/admin/payments")
 @admin_required
 def admin_payments():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT p.*, u.email, u.full_name FROM payments p "
         "LEFT JOIN users u ON p.user_id=u.id "
@@ -1510,46 +2111,68 @@ def admin_payments():
     ).fetchall()
     return jsonify([dict(r) for r in rows])
 
+
 @app.route("/api/admin/payments/<int:pid>/approve", methods=["POST"])
 @admin_required
 def admin_approve_payment(pid):
-    db      = get_db()
-    payment = db.execute("SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
+    pass
+    db = get_db()
+    payment = db.execute(
+        "SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
     if not payment:
+        pass
         return jsonify({"error": "Payment not found"}), 404
-    db.execute("UPDATE payments SET status='approved', updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
-    db.execute("UPDATE users SET plan=? WHERE id=?", (payment["plan"], payment["user_id"]))
+    db.execute(
+        "UPDATE payments SET status='approved', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (pid,
+         ))
+    db.execute("UPDATE users SET plan=? WHERE id=?",
+               (payment["plan"], payment["user_id"]))
     db.commit()
-    user = db.execute("SELECT email, full_name FROM users WHERE id=?", (payment["user_id"],)).fetchone()
+    user = db.execute(
+        "SELECT email, full_name FROM users WHERE id=?",
+        (payment["user_id"],
+         )).fetchone()
     if user:
+        pass
         send_email(
-            user["email"], user["full_name"],
+            user["email"],
+            user["full_name"],
             f"✅ Payment approved — You're now on {payment['plan'].title()}!",
             f"""<div style="font-family:sans-serif;max-width:600px;margin:auto">
             <h2 style="color:#4F46E5">Payment Approved!</h2>
             <p>Your <b>{payment['plan'].title()}</b> plan is now active. Thank you!</p>
             <a href="{APP_URL}/dashboard" style="display:inline-block;background:#4F46E5;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold">
                 Go to Dashboard →
-            </a></div>"""
-        )
-    return jsonify({"status": "approved", "plan": payment["plan"], "user_id": payment["user_id"]})
+            </a></div>""")
+    return jsonify({"status": "approved",
+                    "plan": payment["plan"],
+                    "user_id": payment["user_id"]})
+
 
 @app.route("/api/admin/payments/<int:pid>/reject", methods=["POST"])
 @admin_required
 def admin_reject_payment(pid):
-    d       = request.get_json() or {}
-    reason  = d.get("reason", "Payment could not be verified")
-    db      = get_db()
-    payment = db.execute("SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
+    pass
+    d = request.get_json() or {}
+    reason = d.get("reason", "Payment could not be verified")
+    db = get_db()
+    payment = db.execute(
+        "SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
     if not payment:
+        pass
         return jsonify({"error": "Payment not found"}), 404
     db.execute(
         "UPDATE payments SET status='rejected', notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
         (reason, pid)
     )
     db.commit()
-    user = db.execute("SELECT email, full_name FROM users WHERE id=?", (payment["user_id"],)).fetchone()
+    user = db.execute(
+        "SELECT email, full_name FROM users WHERE id=?",
+        (payment["user_id"],
+         )).fetchone()
     if user:
+        pass
         send_email(
             user["email"], user["full_name"],
             "Payment not approved — action required",
@@ -1560,99 +2183,130 @@ def admin_reject_payment(pid):
         )
     return jsonify({"status": "rejected"})
 
-# ── Admin API ─────────────────────────────────────────────────────────────────
+# ── Admin API ───────────────────────────────────────────────────────────
+
+
 @app.route("/api/admin/create", methods=["POST"])
 def create_admin():
+    pass
     d = request.get_json() or {}
     if d.get("master_key") != MASTER_KEY:
+        pass
         return jsonify({"error": "Not authorized"}), 403
-    email    = d.get("email", "").strip().lower()
+    email = d.get("email", "").strip().lower()
     password = d.get("password", "")
     db = get_db()
     try:
-        db.execute("INSERT INTO users (email, password_hash, is_admin) VALUES (?,?,1)",
-                   (email, hash_pw(password)))
+        pass
+        pass
+        db.execute(
+            "INSERT INTO users (email, password_hash, is_admin) VALUES (?,?,1)",
+            (email,
+             hash_pw(password)))
     except sqlite3.IntegrityError:
+        pass
         db.execute("UPDATE users SET is_admin=1 WHERE email=?", (email,))
     return jsonify({"status": "admin created"})
+
 
 @app.route("/api/admin/stats")
 @admin_required
 def admin_stats():
-    db            = get_db()
-    total_users   = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    total_vids    = db.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
-    uploaded      = db.execute("SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
-    total_chans   = db.execute("SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
-    pro           = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
-    agency        = db.execute("SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
-    growth        = db.execute("SELECT COUNT(*) FROM users WHERE plan='growth'").fetchone()[0]
-    queue_pending = db.execute("SELECT COUNT(*) FROM queue WHERE status IN ('pending','processing')").fetchone()[0]
-    pending_pays  = db.execute("SELECT COUNT(*) FROM payments WHERE status IN ('pending','submitted')").fetchone()[0]
+    pass
+    db = get_db()
+    total_users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    total_vids = db.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+    uploaded = db.execute(
+        "SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
+    total_chans = db.execute(
+        "SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
+    pro = db.execute(
+        "SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
+    agency = db.execute(
+        "SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
+    growth = db.execute(
+        "SELECT COUNT(*) FROM users WHERE plan='growth'").fetchone()[0]
+    queue_pending = db.execute(
+        "SELECT COUNT(*) FROM queue WHERE status IN ('pending','processing')").fetchone()[0]
+    pending_pays = db.execute(
+        "SELECT COUNT(*) FROM payments WHERE status IN ('pending','submitted')").fetchone()[0]
     return jsonify({
-        "total_users":      total_users,
-        "total_videos":     total_vids,
-        "uploaded":         uploaded,
-        "total_channels":   total_chans,
-        "mrr":              (pro * 29) + (agency * 99) + (growth * 49),
-        "pro_users":        pro,
-        "agency_users":     agency,
-        "growth_users":     growth,
-        "queue_pending":    queue_pending,
+        "total_users": total_users,
+        "total_videos": total_vids,
+        "uploaded": uploaded,
+        "total_channels": total_chans,
+        "mrr": (pro * 29) + (agency * 99) + (growth * 49),
+        "pro_users": pro,
+        "agency_users": agency,
+        "growth_users": growth,
+        "queue_pending": queue_pending,
         "pending_payments": pending_pays,
-        "worker_online":    worker_online_status(),
+        "worker_online": worker_online_status(),
     })
+
 
 @app.route("/api/admin/users")
 @admin_required
 def admin_users():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT id, email, full_name, plan, is_admin, created_at FROM users ORDER BY created_at DESC"
     ).fetchall()
     return jsonify([dict(r) for r in rows])
 
+
 @app.route("/api/admin/users/<int:uid>/plan", methods=["PUT", "POST"])
 @admin_required
 def admin_set_plan(uid):
-    d  = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     db = get_db()
-    db.execute("UPDATE users SET plan=? WHERE id=?", (d.get("plan", "starter"), uid))
+    db.execute("UPDATE users SET plan=? WHERE id=?",
+               (d.get("plan", "starter"), uid))
     return jsonify({"status": "updated"})
+
 
 @app.route("/api/admin/users/<int:uid>", methods=["DELETE"])
 @admin_required
 def admin_delete_user(uid):
+    pass
     db = get_db()
     # Prevent deleting other admins
-    target = db.execute("SELECT is_admin FROM users WHERE id=?", (uid,)).fetchone()
+    target = db.execute(
+        "SELECT is_admin FROM users WHERE id=?", (uid,)).fetchone()
     if target and target["is_admin"]:
+        pass
         return jsonify({"error": "Cannot delete admin accounts"}), 403
     # Cascade delete
     db.execute("DELETE FROM queue    WHERE user_id=?", (uid,))
     db.execute("DELETE FROM videos   WHERE user_id=?", (uid,))
     db.execute("UPDATE channels SET active=0 WHERE user_id=?", (uid,))
     db.execute("DELETE FROM payments WHERE user_id=?", (uid,))
-    db.execute("DELETE FROM referrals WHERE referrer_id=? OR referred_id=?", (uid, uid))
+    db.execute(
+        "DELETE FROM referrals WHERE referrer_id=? OR referred_id=?", (uid, uid))
     db.execute("DELETE FROM email_sequences WHERE user_id=?", (uid,))
     db.execute("DELETE FROM promotions WHERE user_id=?", (uid,))
     db.execute("DELETE FROM users    WHERE id=?", (uid,))
     return jsonify({"status": "deleted"})
 
+
 @app.route("/api/admin/channels")
 @admin_required
 def admin_channels():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT c.*, u.email FROM channels c LEFT JOIN users u ON c.user_id=u.id "
-        "WHERE c.active=1 ORDER BY c.created_at DESC"
-    ).fetchall()
+        "WHERE c.active=1 ORDER BY c.created_at DESC").fetchall()
     return jsonify([dict(r) for r in rows])
+
 
 @app.route("/api/admin/videos")
 @admin_required
 def admin_videos():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT v.*, u.email, c.channel_name FROM videos v "
         "LEFT JOIN users u ON v.user_id=u.id "
@@ -1661,130 +2315,193 @@ def admin_videos():
     ).fetchall()
     return jsonify([dict(r) for r in rows])
 
+
 @app.route("/api/admin/social-keys", methods=["POST"])
 @admin_required
 def admin_save_social_keys():
-    d        = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     platform = d.get("platform", "")
-    creds    = d.get("creds", {})
+    creds = d.get("creds", {})
     try:
+        pass
+        pass
         db = get_db()
-        sk_row = db.execute("SELECT value FROM system_settings WHERE key='social_keys'").fetchone()
-        existing = json.loads(sk_row["value"]) if sk_row and sk_row["value"] else {}
+        sk_row = db.execute(
+            "SELECT value FROM system_settings WHERE key='social_keys'").fetchone()
+        existing = json.loads(
+            sk_row["value"]) if sk_row and sk_row["value"] else {}
         existing[platform] = creds
         val = json.dumps(existing)
         if sk_row:
-            db.execute("UPDATE system_settings SET value=? WHERE key='social_keys'", (val,))
+            pass
+            db.execute(
+                "UPDATE system_settings SET value=? WHERE key='social_keys'", (val,))
         else:
-            db.execute("INSERT INTO system_settings (key, value) VALUES ('social_keys',?)", (val,))
+            pass
+            db.execute(
+                "INSERT INTO system_settings (key, value) VALUES ('social_keys',?)", (val,))
         return jsonify({"status": "saved"})
     except Exception as e:
+        pass
         return jsonify({"error": str(e)}), 500
 
-# ── Static file serving ───────────────────────────────────────────────────────
+# ── Static file serving ─────────────────────────────────────────────────
+
+
 @app.route("/uploads/<path:filename>")
 def serve_uploads(filename):
+    pass
     uploads_dir = os.path.join(os.getcwd(), "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
     return send_from_directory(uploads_dir, filename)
 
+
 @app.route("/generated_videos/<path:filename>")
 def serve_generated(filename):
+    pass
     gen_dir = os.path.join(os.getcwd(), "generated_videos")
     return send_from_directory(gen_dir, filename)
 
-# ── Queue status / cancel ─────────────────────────────────────────────────────
+# ── Queue status / cancel ───────────────────────────────────────────────
+
+
 @app.route("/api/queue/status")
 @login_required
 def queue_status():
+    pass
     db = get_db()
     q_rows = db.execute(
         "SELECT q.*, c.channel_name FROM queue q LEFT JOIN channels c ON q.channel_id=c.id "
-        "WHERE q.user_id=? ORDER BY q.created_at DESC LIMIT 30", (request.uid,)
-    ).fetchall()
+        "WHERE q.user_id=? ORDER BY q.created_at DESC LIMIT 30", (request.uid,)).fetchall()
     v_rows = db.execute(
         "SELECT v.*, c.channel_name FROM videos v LEFT JOIN channels c ON v.channel_id=c.id "
-        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50", (request.uid,)
-    ).fetchall()
-    total    = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=?", (request.uid,)).fetchone()[0]
-    uploaded = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'", (request.uid,)).fetchone()[0]
-    pending  = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'", (request.uid,)).fetchone()[0]
+        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50", (request.uid,)).fetchall()
+    total = db.execute(
+        "SELECT COUNT(*) FROM videos WHERE user_id=?",
+        (request.uid,
+         )).fetchone()[0]
+    uploaded = db.execute(
+        "SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'",
+        (request.uid,
+         )).fetchone()[0]
+    pending = db.execute(
+        "SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'",
+        (request.uid,
+         )).fetchone()[0]
     return jsonify({
-        "queue":         [dict(r) for r in q_rows],
-        "videos":        [dict(r) for r in v_rows],
-        "stats":         {"total": total, "uploaded": uploaded, "pending": pending},
+        "queue": [dict(r) for r in q_rows],
+        "videos": [dict(r) for r in v_rows],
+        "stats": {"total": total, "uploaded": uploaded, "pending": pending},
         "worker_online": worker_online_status(),
     })
+
 
 @app.route("/api/queue/<int:jid>/cancel", methods=["POST"])
 @login_required
 def cancel_job(jid):
+    pass
     db = get_db()
-    db.execute("UPDATE queue SET status='cancelled' WHERE id=? AND user_id=? AND status='pending'",
-               (jid, request.uid))
+    db.execute(
+        "UPDATE queue SET status='cancelled' WHERE id=? AND user_id=? AND status='pending'",
+        (jid,
+         request.uid))
     return jsonify({"success": True})
 
 # ── Channel settings / social / autopilot / monetized ────────────────────────
+
+
 @app.route("/api/channels/<int:cid>/settings", methods=["POST"])
 @login_required
 def channel_settings(cid):
-    d  = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     db = get_db()
-    ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?", (cid, request.uid)).fetchone()
+    ch = db.execute(
+        "SELECT id FROM channels WHERE id=? AND user_id=?",
+        (cid,
+         request.uid)).fetchone()
     if not ch:
+        pass
     db.execute(
         "UPDATE channels SET niche=?, video_type=?, schedule=? WHERE id=? AND user_id=?",
-        (d.get("niche"), d.get("voice_style"), d.get("upload_schedule"), cid, request.uid)
-    )
+        (d.get("niche"),
+         d.get("voice_style"),
+         d.get("upload_schedule"),
+         cid,
+         request.uid))
     return jsonify({"success": True})
+
 
 @app.route("/api/channels/<int:cid>/social", methods=["GET"])
 @login_required
 def get_channel_social(cid):
-    db   = get_db()
-    rows = db.execute("SELECT platform, active FROM social_accounts WHERE channel_id=? AND active=1",
-                      (cid,)).fetchall()
+    pass
+    db = get_db()
+    rows = db.execute(
+        "SELECT platform, active FROM social_accounts WHERE channel_id=? AND active=1",
+        (cid,
+         )).fetchall()
     return jsonify({r["platform"]: {"active": r["active"]} for r in rows})
+
 
 @app.route("/api/channels/<int:cid>/social", methods=["POST"])
 @login_required
 def save_channel_social(cid):
-    d           = request.get_json() or {}
-    platform    = d.get("platform")
+    pass
+    d = request.get_json() or {}
+    platform = d.get("platform")
     credentials = json.dumps(d.get("credentials", {}))
     db = get_db()
-    ex = db.execute("SELECT id FROM social_accounts WHERE channel_id=? AND platform=?",
-                    (cid, platform)).fetchone()
+    ex = db.execute(
+        "SELECT id FROM social_accounts WHERE channel_id=? AND platform=?",
+        (cid,
+         platform)).fetchone()
     if ex:
-        db.execute("UPDATE social_accounts SET credentials=?, active=1 WHERE id=?",
-                   (credentials, ex["id"]))
+        pass
+        db.execute(
+            "UPDATE social_accounts SET credentials=?, active=1 WHERE id=?",
+            (credentials,
+             ex["id"]))
     else:
-        db.execute("INSERT INTO social_accounts (channel_id, platform, credentials) VALUES (?,?,?)",
-                   (cid, platform, credentials))
+        pass
+        db.execute(
+            "INSERT INTO social_accounts (channel_id, platform, credentials) VALUES (?,?,?)",
+            (cid,
+             platform,
+             credentials))
     return jsonify({"success": True})
+
 
 @app.route("/api/channels/<int:cid>/social/<platform>", methods=["DELETE"])
 @login_required
 def delete_channel_social(cid, platform):
+    pass
     db = get_db()
-    db.execute("UPDATE social_accounts SET active=0 WHERE channel_id=? AND platform=?",
-               (cid, platform))
+    db.execute(
+        "UPDATE social_accounts SET active=0 WHERE channel_id=? AND platform=?",
+        (cid,
+         platform))
     return jsonify({"success": True})
+
 
 @app.route("/api/channels/<int:cid>/autopilot", methods=["POST"])
 @login_required
 def toggle_autopilot(cid):
-    d       = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     enabled = 1 if d.get("enabled") else 0
     db = get_db()
     db.execute("UPDATE channels SET autopilot=? WHERE id=? AND user_id=?",
                (enabled, cid, request.uid))
     return jsonify({"success": True, "autopilot": bool(enabled)})
 
+
 @app.route("/api/channels/<int:cid>/monetized", methods=["POST"])
 @login_required
 def mark_monetized(cid):
-    d         = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     monetized = 1 if d.get("monetized") else 0
     db = get_db()
     db.execute("UPDATE channels SET monetized=? WHERE id=? AND user_id=?",
@@ -1792,86 +2509,119 @@ def mark_monetized(cid):
     return jsonify({"success": True})
 
 # ── Account: password / branding / uploads / voice clone ─────────────────────
+
+
 @app.route("/api/account/password", methods=["POST"])
 @login_required
 def change_password():
-    d      = request.get_json() or {}
-    cur    = d.get("current", "")
+    pass
+    d = request.get_json() or {}
+    cur = d.get("current", "")
     new_pw = d.get("new", "")
     if not new_pw or len(new_pw) < 6:
+        pass
         return jsonify({"error": "New password must be 6+ characters"}), 400
     db = get_db()
-    u_row = db.execute("SELECT id, password_hash FROM users WHERE id=?", (request.uid,)).fetchone()
+    u_row = db.execute(
+        "SELECT id, password_hash FROM users WHERE id=?",
+        (request.uid,
+         )).fetchone()
     u = u_row if u_row and check_pw(cur, u_row["password_hash"]) else None
     if not u:
-    db.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_pw(new_pw), request.uid))
+        pass
+    db.execute("UPDATE users SET password_hash=? WHERE id=?",
+               (hash_pw(new_pw), request.uid))
     return jsonify({"success": True})
+
 
 @app.route("/api/account/branding", methods=["GET"])
 @login_required
 def get_branding():
+    pass
     db = get_db()
-    u  = db.execute(
+    u = db.execute(
         "SELECT brand_color_primary, brand_color_accent, avatar_path, logo_path, custom_voice_id "
-        "FROM users WHERE id=?", (request.uid,)
-    ).fetchone()
+        "FROM users WHERE id=?", (request.uid,)).fetchone()
     return jsonify(dict(u)) if u else (jsonify({"error": "Not found"}), 404)
+
 
 @app.route("/api/account/branding", methods=["POST"])
 @login_required
 def save_branding():
-    d  = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     db = get_db()
     db.execute(
-        "UPDATE users SET brand_color_primary=?, brand_color_accent=? WHERE id=?",
-        (d.get("brand_color_primary", "#FFD700"), d.get("brand_color_accent", "#FFA500"), request.uid)
-    )
+        "UPDATE users SET brand_color_primary=?, brand_color_accent=? WHERE id=?", (d.get(
+            "brand_color_primary", "#FFD700"), d.get(
+            "brand_color_accent", "#FFA500"), request.uid))
     return jsonify({"success": True})
 
+
 ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
 def _upload_file(ftype):
+    pass
     f = request.files.get("file")
-    if not f: return jsonify({"error": "No file"}), 400
+    if not f:
+        return jsonify({"error": "No file"}), 400
     ext = os.path.splitext(f.filename or "")[1].lower()
     if ext not in ALLOWED_IMAGE_EXTS:
-        return jsonify({"error": f"File type not allowed. Use: {', '.join(ALLOWED_IMAGE_EXTS)}"}), 400
+        pass
+        return jsonify(
+            {"error": f"File type not allowed. Use: {', '.join(ALLOWED_IMAGE_EXTS)}"}), 400
     uploads_dir = os.path.join(os.getcwd(), "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
     fname = f"{ftype}_{request.uid}{ext}"
     f.save(os.path.join(uploads_dir, fname))
     url = f"/uploads/{fname}"
-    db  = get_db()
+    db = get_db()
     col = "avatar_path" if ftype == "avatar" else "logo_path"
     db.execute(f"UPDATE users SET {col}=? WHERE id=?", (url, request.uid))
     return jsonify({"success": True, "url": url})
 
+
 @app.route("/api/account/upload-avatar", methods=["POST"])
 @login_required
 def upload_avatar():
+    pass
     return _upload_file("avatar")
+
 
 @app.route("/api/account/upload-logo", methods=["POST"])
 @login_required
 def upload_logo():
+    pass
     return _upload_file("logo")
+
 
 @app.route("/api/account/onboarding-complete", methods=["POST"])
 @login_required
 def onboarding_complete():
-    d  = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     db = get_db()
-    db.execute("UPDATE users SET onboarding_complete=1 WHERE id=?", (request.uid,))
+    db.execute(
+        "UPDATE users SET onboarding_complete=1 WHERE id=?", (request.uid,))
     return jsonify({"success": True})
+
 
 @app.route("/api/account/clone-voice", methods=["POST"])
 @login_required
 def clone_voice():
+    pass
     if not ELEVENLABS_KEY:
-        return jsonify({"error": "ElevenLabs not configured — set ELEVENLABS_API_KEY"}), 503
-    f    = request.files.get("audio")
+        pass
+        return jsonify(
+            {"error": "ElevenLabs not configured — set ELEVENLABS_API_KEY"}), 503
+    f = request.files.get("audio")
     name = request.form.get("name", f"User {request.uid} Voice")
-    if not f: return jsonify({"error": "No audio file provided"}), 400
+    if not f:
+        return jsonify({"error": "No audio file provided"}), 400
     try:
+        pass
+        pass
         boundary = b"----FormBoundary" + secrets.token_hex(8).encode()
         body = b"".join([
             b"--" + boundary + b"\r\n",
@@ -1883,79 +2633,102 @@ def clone_voice():
             b"--" + boundary + b"--\r\n",
         ])
         req = urllib.request.Request(
-            "https://api.elevenlabs.io/v1/voices/add", data=body,
-            headers={"xi-api-key": ELEVENLABS_KEY,
-                     "Content-Type": f"multipart/form-data; boundary={boundary.decode()}"}
-        )
+            "https://api.elevenlabs.io/v1/voices/add",
+            data=body,
+            headers={
+                "xi-api-key": ELEVENLABS_KEY,
+                "Content-Type": f"multipart/form-data; boundary={boundary.decode()}"})
         with urllib.request.urlopen(req) as r:
             voice_id = json.loads(r.read()).get("voice_id", "")
         db = get_db()
-        db.execute("UPDATE users SET custom_voice_id=? WHERE id=?", (voice_id, request.uid))
+        db.execute("UPDATE users SET custom_voice_id=? WHERE id=?",
+                   (voice_id, request.uid))
         return jsonify({"success": True, "voice_id": voice_id})
     except Exception as e:
+        pass
         return jsonify({"error": str(e)}), 500
 
 # ── Admin create-admin / channel toggles ─────────────────────────────────────
+
+
 @app.route("/api/admin/create-admin", methods=["POST"])
 @admin_required
 def admin_create_admin():
-    d        = request.get_json() or {}
-    email    = d.get("email", "").strip().lower()
-    name     = d.get("name", "")
+    pass
+    d = request.get_json() or {}
+    email = d.get("email", "").strip().lower()
+    name = d.get("name", "")
     password = d.get("password", "")
     if not email or not password:
+        pass
         return jsonify({"error": "Email and password required"}), 400
     db = get_db()
     try:
+        pass
+        pass
         db.execute(
             "INSERT INTO users (email, password_hash, full_name, plan, is_admin) VALUES (?,?,?,'admin',1)",
             (email, hash_pw(password), name)
         )
     except sqlite3.IntegrityError:
-        db.execute("UPDATE users SET is_admin=1, plan='admin' WHERE email=?", (email,))
+        pass
+        db.execute(
+            "UPDATE users SET is_admin=1, plan='admin' WHERE email=?", (email,))
     return jsonify({"success": True, "message": f"Admin {email} created"})
+
 
 @app.route("/api/admin/channels/<int:cid>/autopilot", methods=["POST"])
 @admin_required
 def admin_toggle_autopilot(cid):
-    d       = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     enabled = 1 if d.get("enabled") else 0
     db = get_db()
     db.execute("UPDATE channels SET autopilot=? WHERE id=?", (enabled, cid))
     return jsonify({"success": True})
 
+
 @app.route("/api/admin/channels/<int:cid>/monetized", methods=["POST"])
 @admin_required
 def admin_mark_monetized(cid):
-    d         = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     monetized = 1 if d.get("monetized") else 0
     db = get_db()
     db.execute("UPDATE channels SET monetized=? WHERE id=?", (monetized, cid))
     return jsonify({"success": True})
 
-# ── Admin promotions ──────────────────────────────────────────────────────────
+# ── Admin promotions ────────────────────────────────────────────────────
+
+
 @app.route("/api/admin/promotions")
 @admin_required
 def admin_promotions():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute(
         "SELECT p.*, u.email FROM promotions p LEFT JOIN users u ON p.user_id=u.id "
-        "ORDER BY p.created_at DESC"
-    ).fetchall()
+        "ORDER BY p.created_at DESC").fetchall()
     return jsonify([dict(r) for r in rows])
+
 
 @app.route("/api/admin/promotions/<int:pid>/approve", methods=["POST"])
 @admin_required
 def approve_promotion(pid):
+    pass
     db = get_db()
-    promo = db.execute("SELECT * FROM promotions WHERE id=?", (pid,)).fetchone()
+    promo = db.execute(
+        "SELECT * FROM promotions WHERE id=?", (pid,)).fetchone()
     if not promo:
+        pass
     db.execute("UPDATE promotions SET status='approved', channel_granted=1, "
                "reviewed_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
-    # Grant extra channel slot by upgrading plan (simplified: just mark as done)
+    # Grant extra channel slot by upgrading plan (simplified: just mark as
+    # done)
     user = db.execute("SELECT email, full_name FROM users WHERE id=?",
                       (promo["user_id"],)).fetchone()
     if user:
+        pass
         send_email(user["email"], user["full_name"],
                    "🎉 Free channel approved!",
                    f"""<div style="font-family:sans-serif">
@@ -1964,68 +2737,96 @@ def approve_promotion(pid):
                    <a href="{APP_URL}/dashboard">Go to Dashboard →</a></div>""")
     return jsonify({"success": True})
 
+
 @app.route("/api/admin/promotions/<int:pid>/reject", methods=["POST"])
 @admin_required
 def reject_promotion(pid):
+    pass
     db = get_db()
-    db.execute("UPDATE promotions SET status='rejected', reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
-               (pid,))
+    db.execute(
+        "UPDATE promotions SET status='rejected', reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
+        (pid,
+         ))
     return jsonify({"success": True})
 
-# ── Admin system settings ─────────────────────────────────────────────────────
+# ── Admin system settings ───────────────────────────────────────────────
+
+
 @app.route("/api/admin/settings", methods=["GET"])
 @admin_required
 def admin_get_settings():
-    db   = get_db()
+    pass
+    db = get_db()
     rows = db.execute("SELECT key, value FROM system_settings").fetchall()
     return jsonify({r["key"]: r["value"] for r in rows})
+
 
 @app.route("/api/admin/settings", methods=["POST"])
 @admin_required
 def admin_save_settings():
-    d  = request.get_json() or {}
+    pass
+    d = request.get_json() or {}
     db = get_db()
     for k, v in d.items():
-        existing = db.execute("SELECT key FROM system_settings WHERE key=?", (k,)).fetchone()
+        pass
+        existing = db.execute(
+            "SELECT key FROM system_settings WHERE key=?", (k,)).fetchone()
         if existing:
-            db.execute("UPDATE system_settings SET value=? WHERE key=?", (str(v), k))
+            pass
+            db.execute(
+                "UPDATE system_settings SET value=? WHERE key=?", (str(v), k))
         else:
-            db.execute("INSERT INTO system_settings (key, value) VALUES (?,?)", (k, str(v)))
+            pass
+            db.execute(
+                "INSERT INTO system_settings (key, value) VALUES (?,?)", (k, str(v)))
     return jsonify({"success": True})
 
-# ── Health ────────────────────────────────────────────────────────────────────
+# ── Health ──────────────────────────────────────────────────────────────
+
+
 @app.route("/health")
 def health():
+    pass
     return jsonify({
-        "status":  "ok",
+        "status": "ok",
         "service": "FinanceFlow SaaS",
-        "jwt":     HAS_JWT,
-        "openai":  bool(OPENAI_KEY and HAS_OPENAI),
-        "stripe":  bool(STRIPE_KEY and HAS_STRIPE),
-        "celery":  bool(celery_app),
-        "queue":   "celery+redis" if celery_app else "sqlite",
+        "jwt": HAS_JWT,
+        "openai": bool(OPENAI_KEY and HAS_OPENAI),
+        "stripe": bool(STRIPE_KEY and HAS_STRIPE),
+        "celery": bool(celery_app),
+        "queue": "celery+redis" if celery_app else "sqlite",
     })
 
+
 def _email_sequence_worker():
+
+    pass
     """Background thread: send Day 1 / Day 3 / Day 7 emails."""
     import datetime
     while True:
+        pass
         try:
-            db  = get_db()
+            pass
+            pass
+            db = get_db()
             now = int(time.time())
             sequences = db.execute(
                 "SELECT es.id, es.user_id, es.day, u.email, u.full_name, u.created_at "
                 "FROM email_sequences es JOIN users u ON es.user_id=u.id "
-                "WHERE es.sent=0"
-            ).fetchall()
+                "WHERE es.sent=0").fetchall()
             for seq in sequences:
+                pass
                 try:
+                    pass
+                    pass
                     created_ts = int(datetime.datetime.fromisoformat(
                         str(seq["created_at"])).timestamp())
                 except Exception:
+                    pass
                     created_ts = now
                 send_after = created_ts + seq["day"] * 86400
                 if now >= send_after:
+                    pass
                     day = seq["day"]
                     subjects = {
                         1: "Welcome! Here's how to make your first video today",
@@ -2037,46 +2838,55 @@ def _email_sequence_worker():
                                <h2 style="color:#4F46E5">Your first video is just 3 clicks away</h2>
                                <p>Connect your YouTube channel, pick your niche, and hit Generate. That's it.</p>
                                <a href="{APP_URL}/dashboard" style="background:#4F46E5;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block">
-                                   Create My First Video →</a></div>""",
-                        3: f"""<div style="font-family:sans-serif;max-width:600px;margin:auto">
+                                   Create My First Video →</a></div>""", 3: f"""<div style="font-family:sans-serif;max-width:600px;margin:auto">
                                <h2 style="color:#4F46E5">3 tips for going viral on finance</h2>
                                <ol><li>Post Shorts daily — algorithm rewards consistency</li>
                                <li>Use punchy hooks in the first 2 seconds</li>
                                <li>Niche down: crypto outperforms generic "money tips"</li></ol>
                                <a href="{APP_URL}/dashboard" style="background:#4F46E5;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block">
-                                   Generate Videos Now →</a></div>""",
-                        7: f"""<div style="font-family:sans-serif;max-width:600px;margin:auto">
+                                   Generate Videos Now →</a></div>""", 7: f"""<div style="font-family:sans-serif;max-width:600px;margin:auto">
                                <h2 style="color:#4F46E5">One week in — keep the momentum!</h2>
                                <p>The channels that post daily for 30 days see 10x more subscribers.
                                Enable Autopilot and let FinanceFlow do the work for you.</p>
                                <a href="{APP_URL}/dashboard" style="background:#4F46E5;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block">
-                                   Enable Autopilot →</a></div>""",
-                    }
-                    subj = subjects.get(day, f"Day {day} tips from FinanceFlow")
+                                   Enable Autopilot →</a></div>""", }
+                    subj = subjects.get(
+                        day, f"Day {day} tips from FinanceFlow")
                     body = bodies.get(day, "")
                     if body:
-                        send_email(seq["email"], seq["full_name"] or seq["email"], subj, body)
-                    db.execute("UPDATE email_sequences SET sent=1, sent_at=CURRENT_TIMESTAMP WHERE id=?",
-                               (seq["id"],))
+                        pass
+                        send_email(seq["email"], seq["full_name"]
+                                   or seq["email"], subj, body)
+                    db.execute(
+                        "UPDATE email_sequences SET sent=1, sent_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (seq["id"],
+                         ))
                     db.commit()
         except Exception as e:
+            pass
             print(f"[EMAIL SEQ] Error: {e}")
         time.sleep(3600)  # Check every hour
 
+
 def _trial_expiry_worker():
+
+    pass
     """Background thread: downgrade users whose trial has expired."""
     while True:
+        pass
         try:
-            db  = get_db()
+            pass
+            pass
+            db = get_db()
             now = int(time.time())
             db.execute(
                 "UPDATE users SET plan='starter' WHERE trial_ends_at > 0 AND trial_ends_at < ? "
-                "AND plan IN ('pro','agency')",
-                (now,)
-            )
+                "AND plan IN ('pro','agency')", (now,))
         except Exception as e:
+            pass
             print(f"[TRIAL EXPIRY] Error: {e}")
         time.sleep(3600)
+
 
 init_db()
 
@@ -2085,5 +2895,13 @@ threading.Thread(target=_email_sequence_worker, daemon=True).start()
 threading.Thread(target=_trial_expiry_worker, daemon=True).start()
 
 if __name__ == "__main__":
+
     pass
-    app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    pass
+    app.run(
+        debug=False,
+        host="0.0.0.0",
+        port=int(
+            os.environ.get(
+                "PORT",
+                5000)))
