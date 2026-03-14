@@ -189,9 +189,11 @@ def admin_page():
 @app.route("/api/auth/register", methods=["POST"])
 def register():
     d = request.get_json() or {}
+    print(f"[REGISTER] Raw payload: {d}")
     email     = d.get("email", "").strip().lower()
     password  = d.get("password", "")
-    full_name = d.get("full_name", "")
+    full_name = d.get("full_name", "") or d.get("name", "")
+    print(f"[REGISTER] email={email!r} full_name={full_name!r} password_set={bool(password)}")
     if not email or not password:
         return jsonify({"error": "Email and password required"}), 400
     db = get_db()

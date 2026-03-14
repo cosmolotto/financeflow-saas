@@ -351,10 +351,10 @@ async function register() {
   const err = document.getElementById('regError');
   err.style.display = 'none';
   try {
-    const res = await fetch('/api/register', {
+    const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({name, email, password})
+      body: JSON.stringify({full_name: name, email, password})
     });
     const data = await res.json();
     if (data.error) { err.textContent = data.error; err.style.display = 'block'; return; }
@@ -367,7 +367,7 @@ async function loginUser() {
   const err = document.getElementById('loginError');
   err.style.display = 'none';
   try {
-    const res = await fetch('/api/login', {
+    const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({email, password})
@@ -392,14 +392,10 @@ async function doForgot() {
   const okEl = document.getElementById('forgotSuccess');
   errEl.style.display='none'; okEl.style.display='none';
   if (!email) { errEl.textContent='Enter your email'; errEl.style.display='block'; return; }
-  const r = await fetch('/api/forgot-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+  const r = await fetch('/api/auth/forgot-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
   const d = await r.json();
-  if (d.success) {
-    if (d.reset_url) {
-      okEl.innerHTML = '<b>✅ Click below to reset your password:</b><br><br><a href="'+d.reset_url+'" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#FFD700,#FFA500);color:#000;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px">Reset My Password →</a><br><br><small style="color:#6b7280">Link expires in 1 hour</small>';
-    } else {
-      okEl.innerHTML = '✅ ' + d.message;
-    }
+  if (d.status) {
+    okEl.innerHTML = '✅ ' + d.status;
     okEl.style.display = 'block';
   } else {
     errEl.textContent = d.error || 'Something went wrong';
