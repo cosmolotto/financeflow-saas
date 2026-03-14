@@ -567,6 +567,7 @@ if celery_app:
             db.commit()
             return {"error": str(e)}
         finally:
+            pass
 else:
     def process_video_task(job_id):
         pass  # SQLite worker.py handles it
@@ -868,6 +869,7 @@ def register():
         print(f"[REGISTER ERROR] {e}")
         return jsonify({"error": "Internal server error", "detail": str(e)}), 500
     finally:
+            pass
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
