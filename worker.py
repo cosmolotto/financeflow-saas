@@ -5,7 +5,7 @@ Handles: voice, music, frames, render, YouTube upload, social media cross-postin
 """
 
 import os, sys, json, sqlite3, subprocess, time, wave, struct, math, random
-import hmac, hashlib, base64, secrets, urllib.parse, urllib.request
+import hmac, hashlib, base64, secrets, urllib.parse, urllib.request, shutil
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -20,8 +20,16 @@ ELEVENLABS_KEY  = os.environ.get("ELEVENLABS_API_KEY", "")
 OPENAI_KEY      = os.environ.get("OPENAI_API_KEY", "")
 
 def find_ffmpeg():
+    # System PATH first (works on Railway/Linux after nixpacks installs ffmpeg)
+    sys_ff = shutil.which("ffmpeg")
+    if sys_ff:
+        return sys_ff
+    # Mac/local fallbacks
     for p in [os.path.expanduser("~/Downloads/ffmpeg"),"/opt/homebrew/bin/ffmpeg","/usr/local/bin/ffmpeg","/usr/bin/ffmpeg"]:
-        if os.path.exists(p): os.chmod(p,0o755); return p
+        if os.path.exists(p):
+            try: os.chmod(p, 0o755)
+            except: pass
+            return p
     return None
 FFMPEG = find_ffmpeg()
 
@@ -95,18 +103,37 @@ def make_voice(text, out_wav, voice_id=None, rate=165):
                 return True
         except Exception as e:
             print(f"   ElevenLabs failed ({e}), falling back to Mac say...")
-    # Fallback: Mac say command
-    aiff = out_wav.replace(".wav", ".aiff")
-    for voice in ["Daniel", "Samantha", "Alex", "Karen", "Tom"]:
-        res = subprocess.run(["say", "-v", voice, "-r", str(rate), "-o", aiff, "--", text],
-                             capture_output=True)
-        if res.returncode == 0 and os.path.exists(aiff):
-            break
-    subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@44100", aiff, out_wav],
-                   capture_output=True)
-    if os.path.exists(aiff):
-        os.remove(aiff)
-    return os.path.exists(out_wav)
+    # Fallback: gTTS (works on Linux/Railway)
+    try:
+        from gtts import gTTS
+        tts = gTTS(text=text, lang='en', slow=False)
+        mp3_path = out_wav.replace(".wav", "_gtts.mp3")
+        tts.save(mp3_path)
+        if FFMPEG and os.path.exists(mp3_path):
+            subprocess.run([FFMPEG, "-y", "-i", mp3_path, out_wav], capture_output=True)
+            os.remove(mp3_path)
+        if os.path.exists(out_wav):
+            print("   gTTS voice OK")
+            return True
+    except Exception as e:
+        print(f"   gTTS failed ({e})")
+    # Last resort: Mac say (local dev only)
+    try:
+        aiff = out_wav.replace(".wav", ".aiff")
+        for voice in ["Daniel", "Samantha", "Alex", "Karen", "Tom"]:
+            res = subprocess.run(["say", "-v", voice, "-r", str(rate), "-o", aiff, "--", text],
+                                 capture_output=True)
+            if res.returncode == 0 and os.path.exists(aiff):
+                break
+        subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@44100", aiff, out_wav],
+                       capture_output=True)
+        if os.path.exists(aiff):
+            os.remove(aiff)
+        if os.path.exists(out_wav):
+            return True
+    except Exception:
+        pass
+    return False
 
 def get_duration(wav):
     try:
@@ -144,6 +171,7 @@ def make_frames(sd,dur,fdir,vtype):
         draw.rectangle([0,0,W,8],fill=a); draw.rectangle([0,H-8,W,H],fill=a)
         prog=int((t/dur)*(W-80)); draw.rectangle([40,H-6,40+max(prog,4),H-2],fill=a)
         draw.text((W//2,44),"FINANCE CHANNEL",fill=a,font=fnt(32),anchor="mm")
+        draw.text((W//2,H-24),"Made with FinanceFlow.app",fill=(80,80,80),font=fnt(14),anchor="mm")
         line=lines[li] if li<len(lines) else ""
         yoff=int((1-min(((t-li*cd)/cd)*5,1))*40)
         tsz=int((82 if vtype=="short" else 68)*(1+0.03*math.sin(t*6)))
@@ -168,9 +196,21 @@ def make_thumb(sd,out,vtype):
     img.save(out,quality=95)
 
 def render_video(fdir,audio,out,fps):
-    if not FFMPEG: return False
-    r=subprocess.run([FFMPEG,"-y","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,"-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p","-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",out],capture_output=True)
-    return os.path.exists(out)
+    if FFMPEG:
+        r=subprocess.run([FFMPEG,"-y","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,"-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p","-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",out],capture_output=True)
+        if os.path.exists(out): return True
+    # moviepy fallback (no system ffmpeg needed)
+    try:
+        from moviepy.editor import ImageSequenceClip, AudioFileClip
+        frames = sorted([f"{fdir}/{fn}" for fn in os.listdir(fdir) if fn.endswith(".jpg")])
+        clip = ImageSequenceClip(frames, fps=fps)
+        aclip = AudioFileClip(audio)
+        clip = clip.set_audio(aclip)
+        clip.write_videofile(out, codec="libx264", audio_codec="aac", logger=None)
+        return os.path.exists(out)
+    except Exception as e:
+        print(f"   moviepy fallback failed: {e}")
+        return False
 
 def upload_youtube(token,mp4,title,desc,tags):
     fs=os.path.getsize(mp4)
@@ -361,7 +401,9 @@ def process(job):
         done_fail(e)
 
 def check_autopilot():
-    """Queue one video per channel that has autopilot=1 and no job in the last 24h."""
+    """Queue one video per channel that has autopilot=1, respecting its upload_schedule."""
+    import datetime
+    SCHEDULE_HOURS = {"daily": 24, "twice_daily": 12, "weekly": 168}
     db = get_db()
     try:
         channels = db.execute(
@@ -369,16 +411,19 @@ def check_autopilot():
         ).fetchall()
         queued = 0
         for ch in channels:
+            schedule = (ch["schedule"] or "daily").lower()
+            if schedule == "manual":
+                continue  # Never auto-queue manual channels
+            hours_needed = SCHEDULE_HOURS.get(schedule, 24)
             last_job = db.execute(
                 "SELECT created_at FROM queue WHERE channel_id=? "
                 "ORDER BY created_at DESC LIMIT 1", (ch["id"],)
             ).fetchone()
             if last_job:
-                import datetime
                 try:
                     last_dt = datetime.datetime.fromisoformat(last_job["created_at"])
                     age_h = (datetime.datetime.utcnow() - last_dt).total_seconds() / 3600
-                    if age_h < 24:
+                    if age_h < hours_needed:
                         continue
                 except Exception:
                     pass
@@ -404,8 +449,9 @@ if __name__=="__main__":
     print("  Polls queue every 10s | Ctrl+C to stop")
     print("==============================================")
     if not FFMPEG:
-        print("ERROR: ffmpeg not found! Put ARM ffmpeg at ~/Downloads/ffmpeg"); sys.exit(1)
-    print(f"ffmpeg: {FFMPEG}")
+        print("[WARN] ffmpeg not found in PATH — moviepy fallback will be used for rendering")
+    else:
+        print(f"ffmpeg: {FFMPEG}")
     try: from PIL import Image; print("Pillow: ready")
     except: print("ERROR: pip3 install Pillow --break-system-packages"); sys.exit(1)
     print(f"DB: {DB} | Output: {OUT}\n")
