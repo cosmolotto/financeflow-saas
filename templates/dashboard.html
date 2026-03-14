@@ -450,6 +450,12 @@ tr:hover td{background:rgba(255,255,255,0.01)}
           <button class="btn {% if user.plan=='agency' and not is_admin %}bo{% else %}bg{% endif %}" style="width:100%;justify-content:center" onclick="upgrade('agency')">{% if user.plan=='agency' and not is_admin %}Current Plan{% else %}Get Agency{% endif %}</button>
         </div>
       </div>
+
+      <!-- Payment History -->
+      <div style="margin-top:28px">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:14px">💳 Payment History</div>
+        <div class="card"><div id="billing-history"><div class="em" style="padding:28px"><div class="ei">💳</div><h4>Loading...</h4></div></div></div>
+      </div>
     </div>
 
     <!-- ══ SETTINGS ══ -->
@@ -563,10 +569,27 @@ tr:hover td{background:rgba(255,255,255,0.01)}
 </div>
 
 <div class="ov" id="pm-payment">
-  <div class="mo"><button class="mc" onclick="cAll()">✕</button><h3>💳 Upgrade Plan</h3><div class="mo-s">Submit your bank transfer details to activate <strong id="pay-plan-label"></strong> plan</div>
+  <div class="mo"><button class="mc" onclick="cAll()">✕</button><h3>💳 Upgrade Plan</h3><div class="mo-s">Submit payment details to activate <strong id="pay-plan-label"></strong> plan</div>
     <input type="hidden" id="pay-plan">
-    <div class="fd"><label>Selected Plan</label><select id="pay-plan-select" onchange="document.getElementById('pay-plan').value=this.value;document.getElementById('pay-plan-label').textContent=this.value.charAt(0).toUpperCase()+this.value.slice(1)"><option value="pro">Pro</option><option value="agency">Agency</option></select></div>
-    <div class="fd"><label>Bank Transfer Reference Number</label><input type="text" id="pay-ref" placeholder="e.g. TRF-20240314-XXXX"></div>
+    <div class="fd"><label>Select Plan</label>
+      <select id="pay-plan-select" onchange="document.getElementById('pay-plan').value=this.value;document.getElementById('pay-plan-label').textContent=this.value==='pro'?'Pro ($29/mo)':'Agency ($99/mo)'">
+        <option value="pro">Pro — $29/mo (3 channels, 14 videos/week, social posting)</option>
+        <option value="agency">Agency — $99/mo (10 channels, unlimited videos, API access)</option>
+      </select>
+    </div>
+    <div class="fd"><label>Payment Method</label>
+      <select id="pay-method">
+        <option value="bank_transfer">🏦 Bank Transfer</option>
+        <option value="jazzcash">📱 JazzCash</option>
+        <option value="easypaisa">💚 EasyPaisa</option>
+      </select>
+    </div>
+    <div class="fd"><label>Reference / Transaction Number</label><input type="text" id="pay-ref" placeholder="e.g. TRF-20240314-XXXX or JC-123456"></div>
+    <div style="background:rgba(255,215,0,0.04);border:1px solid rgba(255,215,0,0.15);border-radius:9px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px">
+      <strong style="color:var(--text)">Payment Details:</strong><br>
+      Bank: HBL · Account: 0123-4567890-01 · Title: FinanceFlow Ltd<br>
+      JazzCash / EasyPaisa: 0300-1234567 (FinanceFlow)
+    </div>
     <div class="mf"><button class="btn bg" onclick="submitPayment()">Submit Payment Request</button><button class="btn bo" onclick="cAll()">Cancel</button></div>
   </div>
 </div>
@@ -581,7 +604,12 @@ function sp(n){
   document.querySelectorAll('[id^="page-"]').forEach(p=>p.style.display='none');
   const el=document.getElementById('page-'+n);if(el)el.style.display='block';
   document.getElementById('ptitle').textContent=TITLES[n]||n;
-  document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.ni').forEach(b=>{
+    b.classList.remove('on');
+    if(b.getAttribute('onclick')==="sp('"+n+"')")b.classList.add('on');
+  });
+  if(n==='billing')loadBillingHistory();
+  if(n==='queue'||n==='videos')poll();
 }
 function toast(msg,t='ok'){const e=document.getElementById('toast');e.textContent=msg;e.className='ts '+t+' show';setTimeout(()=>e.classList.remove('show'),4000);}
 function openModal(id){document.getElementById(id).classList.add('open');}
@@ -683,10 +711,46 @@ async function doSavePr(){const t=document.getElementById('sp-t').value.trim(),p
 async function delPr(id){const r=await fetch('/api/prompts/'+id,{method:'DELETE'});const d=await r.json();if(d.success){toast('Deleted');setTimeout(()=>location.reload(),500);}}
 
 // BILLING
-function upgrade(plan){document.getElementById('pay-plan').value=plan;document.getElementById('pay-plan-select').value=plan;document.getElementById('pay-ref').value='';document.getElementById('pay-plan-label').textContent=plan.charAt(0).toUpperCase()+plan.slice(1);openModal('pm-payment');}
-async function submitPayment(){const plan=document.getElementById('pay-plan').value;const ref=document.getElementById('pay-ref').value.trim();if(!ref){toast('Please enter your bank transfer reference number','er');return;}const r=await fetch('/api/payments/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan,reference:ref})});const d=await r.json();cAll();if(d.success){toast(d.message||'Payment request submitted ✅','ok');setTimeout(()=>location.reload(),1500);}else toast(d.error,'er');}
+async function loadBillingHistory(){
+  const el=document.getElementById('billing-history');if(!el)return;
+  try{
+    const r=await fetch('/api/payments/status');const d=await r.json();
+    const payments=d.payments||[];
+    if(!payments.length){el.innerHTML='<div class="em" style="padding:28px"><div class="ei">💳</div><h4>No payment history</h4><p>Upgrade your plan to see payments here</p></div>';return;}
+    const rows=payments.map(p=>{
+      const sc={'approved':'pu','pending':'pp','rejected':'pf'};
+      const st=p.status||'pending';
+      return `<tr>
+        <td style="color:var(--muted);font-size:11px">${(p.created_at||'').slice(0,10)}</td>
+        <td><strong>${(p.plan||'').charAt(0).toUpperCase()+(p.plan||'').slice(1)}</strong></td>
+        <td style="color:var(--muted)">${(p.payment_method||'bank_transfer').replace(/_/g,' ')}</td>
+        <td style="font-family:monospace;font-size:11px;color:var(--muted)">${p.reference||'—'}</td>
+        <td><span class="pl ${sc[st]||'pp'}">${st.charAt(0).toUpperCase()+st.slice(1)}</span></td>
+      </tr>`;
+    }).join('');
+    el.innerHTML=`<table><thead><tr><th>Date</th><th>Plan</th><th>Method</th><th>Reference</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }catch(e){el.innerHTML='<div class="em" style="padding:20px"><p style="color:var(--muted)">Could not load payment history</p></div>';}
+}
+function upgrade(plan){
+  if(plan==='starter'){toast('You are already on or downgrading to the free plan — contact support','inf');return;}
+  document.getElementById('pay-plan').value=plan;
+  document.getElementById('pay-plan-select').value=plan;
+  document.getElementById('pay-ref').value='';
+  document.getElementById('pay-plan-label').textContent=plan==='pro'?'Pro ($29/mo)':'Agency ($99/mo)';
+  openModal('pm-payment');
+}
+async function submitPayment(){
+  const plan=document.getElementById('pay-plan').value;
+  const payment_method=document.getElementById('pay-method').value;
+  const reference=document.getElementById('pay-ref').value.trim();
+  if(!reference){toast('Please enter your reference/transaction number','er');return;}
+  const r=await fetch('/api/payments/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan,payment_method,reference})});
+  const d=await r.json();cAll();
+  if(d.success){toast(d.message||'Payment request submitted ✅','ok');setTimeout(()=>location.reload(),1500);}
+  else toast(d.error,'er');
+}
 async function changePw(){const r=await fetch('/api/account/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current:document.getElementById('pw-cur').value,new:document.getElementById('pw-new').value})});const d=await r.json();if(d.success){toast('Password updated ✅');document.getElementById('pw-cur').value='';document.getElementById('pw-new').value='';}else toast(d.error,'er');}
-async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/';}
+async function doLogout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/';}
 
 // REAL-TIME POLL
 function mkP(s){return({'uploaded':'pu','pending':'pp','processing':'ppr','failed':'pf','cancelled':'pc'})[s]||'pc';}

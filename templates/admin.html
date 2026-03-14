@@ -120,6 +120,7 @@ select.ps:focus{border-color:var(--g)}
     <button class="tab" onclick="showTab('channels',this)">📺 Channels</button>
     <button class="tab" onclick="showTab('videos',this)">🎬 Videos</button>
     <button class="tab" onclick="showTab('social',this)">🌐 Social Keys</button>
+    <button class="tab" onclick="showTab('payments',this)">💳 Payments<span id="pay-badge" style="display:none;background:rgba(245,158,11,0.2);color:#f59e0b;font-size:9px;padding:1px 5px;border-radius:100px;margin-left:5px;font-weight:700">0</span></button>
     <button class="tab" onclick="showTab('system',this)">⚙️ System</button>
   </div>
   <div class="nav-r">
@@ -329,6 +330,19 @@ select.ps:focus{border-color:var(--g)}
   </div>
 </div>
 
+<!-- ══ PAYMENTS ══ -->
+<div id="page-payments" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="font-size:18px;font-weight:700">💳 Payment Requests</div>
+    <button class="btn bo bsm" onclick="loadPayments()">↺ Refresh</button>
+  </div>
+  <div class="card">
+    <div id="payments-table">
+      <div class="em" style="padding:36px"><div class="em-i">💳</div>Loading payments...</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ SYSTEM ══ -->
 <div id="page-system" class="page">
   <div class="sys-grid">
@@ -380,8 +394,9 @@ const v=id=>document.getElementById(id)?.value||'';
 function showTab(n,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
-  document.getElementById('page-'+n).classList.add('on');
+  const page=document.getElementById('page-'+n);if(page)page.classList.add('on');
   if(el)el.classList.add('on');
+  if(n==='payments')loadPayments();
 }
 function toast(msg,t='ok'){const e=document.getElementById('toast');e.textContent=msg;e.className='ts '+t+' show';setTimeout(()=>e.classList.remove('show'),4000);}
 
@@ -407,7 +422,55 @@ function filterUsers(){
     r.style.display=r.dataset.email.toLowerCase().includes(q)?'':'none';
   });
 }
-async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/';}
+async function doLogout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/';}
+
+async function loadPayments(){
+  const el=document.getElementById('payments-table');
+  if(!el)return;
+  el.innerHTML='<div class="em" style="padding:28px"><div class="em-i">💳</div>Loading...</div>';
+  try{
+    const r=await fetch('/api/admin/payments');const d=await r.json();
+    const pays=d.payments||d||[];
+    if(!pays.length){el.innerHTML='<div class="em" style="padding:36px"><div class="em-i">💳</div>No payment requests yet</div>';return;}
+    // Update badge
+    const pending=pays.filter(p=>p.status==='pending'||p.status==='submitted').length;
+    const badge=document.getElementById('pay-badge');
+    if(badge){badge.textContent=pending;badge.style.display=pending>0?'inline':'none';}
+    const rows=pays.map(p=>{
+      const sc={'approved':'p-up','pending':'p-pend','submitted':'p-pend','rejected':'p-fail'};
+      const st=p.status||'pending';
+      const canApprove=(st==='pending'||st==='submitted');
+      const actions=canApprove
+        ?`<button class="btn bsm" style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:var(--grn)" onclick="approvePayment(${p.id})">✅ Approve</button>
+           <button class="btn bd bsm" onclick="rejectPayment(${p.id})">✕ Reject</button>`
+        :'—';
+      return `<tr>
+        <td style="color:var(--mt);font-size:11px">${(p.created_at||'').slice(0,16)}</td>
+        <td><strong>${p.email||'—'}</strong><div style="font-size:10px;color:var(--mt)">${p.full_name||''}</div></td>
+        <td><span class="pl p-${p.plan==='pro'?'pro':p.plan==='agency'?'agency':'starter'}">${(p.plan||'').charAt(0).toUpperCase()+(p.plan||'').slice(1)}</span></td>
+        <td style="color:var(--mt)">${(p.provider||p.payment_method||'—').replace(/_/g,' ')}</td>
+        <td style="font-family:'Space Mono',monospace;font-size:10px;color:var(--mt)">${p.reference||'—'}</td>
+        <td><span class="pl ${sc[st]||'p-pend'}">${st.charAt(0).toUpperCase()+st.slice(1)}</span></td>
+        <td style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${actions}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML=`<table><thead><tr><th>Date</th><th>User</th><th>Plan</th><th>Method</th><th>Reference</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }catch(e){el.innerHTML='<div class="em" style="padding:24px"><p style="color:var(--red)">Failed to load payments: '+e.message+'</p></div>';}
+}
+async function approvePayment(pid){
+  if(!confirm('Approve this payment and upgrade the user?'))return;
+  const r=await fetch('/api/admin/payments/'+pid+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+  const d=await r.json();
+  if(d.status||d.success||d.message){toast('✅ Payment approved — user plan upgraded');loadPayments();refresh();}
+  else toast(d.error||'Approve failed','er');
+}
+async function rejectPayment(pid){
+  const reason=prompt('Rejection reason (optional):');
+  const r=await fetch('/api/admin/payments/'+pid+'/reject',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:reason||''})});
+  const d=await r.json();
+  if(d.status||d.success||d.message){toast('Payment rejected','inf');loadPayments();}
+  else toast(d.error||'Reject failed','er');
+}
 
 // Auto-refresh stats
 async function refresh(){
@@ -417,6 +480,9 @@ async function refresh(){
     set('s-users',d.total_users);set('s-ch',d.total_channels);set('s-vids',d.uploaded);
     set('s-pro',d.pro_users);set('s-ag',d.agency_users);set('s-q',d.queue_pending||0);
     set('mrr-val','$'+d.mrr);
+    const pb=document.getElementById('pay-badge');
+    if(pb&&d.pending_payments>0){pb.textContent=d.pending_payments;pb.style.display='inline';}
+    else if(pb)pb.style.display='none';
     const wd=document.getElementById('wdot');
     const wdb=document.getElementById('worker-dot-big');
     const wi=document.getElementById('worker-info');

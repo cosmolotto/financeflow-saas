@@ -336,13 +336,23 @@ function closeModal() {
 function switchTab(tab) {
   document.getElementById('registerForm').style.display = tab==='register' ? 'block' : 'none';
   document.getElementById('loginForm').style.display = tab==='login' ? 'block' : 'none';
+  document.getElementById('forgotForm').style.display = 'none';
   document.getElementById('tab-register').classList.toggle('active', tab==='register');
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
 }
 function selectPlan(plan) {
-  openModal('register');
-  // Store selected plan for after registration
-  window._selectedPlan = plan;
+  // If already logged in (cookie/session exists), go straight to dashboard
+  fetch('/api/payments/status').then(r => {
+    if (r.ok && r.status !== 401) {
+      window.location.href = '/dashboard';
+    } else {
+      openModal(plan === 'starter' ? 'register' : 'register');
+      window._selectedPlan = plan;
+    }
+  }).catch(() => {
+    openModal('register');
+    window._selectedPlan = plan;
+  });
 }
 async function register() {
   const name = document.getElementById('regName').value;
