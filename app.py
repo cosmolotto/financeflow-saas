@@ -18,9 +18,9 @@ BREVO_KEY     = os.environ.get("BREVO_API_KEY", "")
 MASTER_KEY    = os.environ.get("MASTER_ADMIN_KEY", "MASTER_ADMIN_KEY")
 
 PLANS = {
-    "starter": {"channels": 1,  "videos_per_week": 3,   "price": 0},
-    "pro":     {"channels": 3,  "videos_per_week": 14,  "price": 29},
-    "agency":  {"channels": 10, "videos_per_week": 999, "price": 99},
+    "starter": {"name": "Starter", "channels": 1,  "videos_per_week": 3,   "price": 0,  "custom_prompts": False, "social_posting": False},
+    "pro":     {"name": "Pro",     "channels": 3,  "videos_per_week": 14,  "price": 29, "custom_prompts": True,  "social_posting": True},
+    "agency":  {"name": "Agency",  "channels": 10, "videos_per_week": 999, "price": 99, "custom_prompts": True,  "social_posting": True},
 }
 
 def get_db():
@@ -179,11 +179,74 @@ def dashboard():
     if not user:
         return redirect("/")
     db = get_db()
-    u = db.execute("SELECT plan, is_admin FROM users WHERE id=?", (user["user_id"],)).fetchone()
+    u = db.execute("SELECT id, email, full_name, plan, is_admin FROM users WHERE id=?",
+                   (user["user_id"],)).fetchone()
+    if not u:
+        db.close()
+        return redirect("/")
+
+    is_admin = bool(u["is_admin"])
+    plan_key = u["plan"] or "starter"
+    plan_data = dict(PLANS.get(plan_key, PLANS["starter"]))
+    if is_admin:
+        plan_data.update({"channels": 9999, "videos_per_week": 9999,
+                          "custom_prompts": True, "social_posting": True})
+
+    user_obj = {
+        "email":   u["email"],
+        "name":    u["full_name"] or u["email"],
+        "plan":    plan_key,
+        "api_key": hashlib.md5(f"ff-{u['id']}".encode()).hexdigest(),
+    }
+
+    channels = [dict(r) for r in db.execute(
+        "SELECT id, channel_name, youtube_channel_id AS channel_id, niche, "
+        "video_type AS voice_style, schedule AS upload_schedule, videos_uploaded "
+        "FROM channels WHERE user_id=? AND active=1 ORDER BY created_at DESC",
+        (u["id"],)
+    ).fetchall()]
+
+    queue = [dict(r) for r in db.execute(
+        "SELECT q.*, c.channel_name FROM queue q "
+        "LEFT JOIN channels c ON q.channel_id=c.id "
+        "WHERE q.user_id=? AND q.status IN ('pending','processing') "
+        "ORDER BY q.created_at DESC LIMIT 20",
+        (u["id"],)
+    ).fetchall()]
+
+    videos = [dict(r) for r in db.execute(
+        "SELECT v.*, c.channel_name FROM videos v "
+        "LEFT JOIN channels c ON v.channel_id=c.id "
+        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50",
+        (u["id"],)
+    ).fetchall()]
+
+    social = {}
+    for row in db.execute(
+        "SELECT sa.* FROM social_accounts sa "
+        "JOIN channels c ON sa.channel_id=c.id "
+        "WHERE c.user_id=? AND sa.active=1", (u["id"],)
+    ).fetchall():
+        social.setdefault(row["channel_id"], []).append(dict(row))
+
     db.close()
-    plan = u["plan"] if u else "starter"
-    is_admin = bool(u["is_admin"]) if u else False
-    return render_template("dashboard.html", plan=plan, is_admin=is_admin, plans=PLANS)
+
+    stats = {
+        "total":    len(videos),
+        "uploaded": sum(1 for v in videos if v["status"] == "uploaded"),
+        "channels": len(channels),
+        "pending":  len(queue),
+    }
+
+    success = "channel_connected" if request.args.get("connected") else ""
+
+    return render_template("dashboard.html",
+        plan=plan_data, is_admin=is_admin, plans=PLANS,
+        user=user_obj, channels=channels, queue=queue,
+        videos=videos, social=social, stats=stats,
+        prompts=[], worker_online=False,
+        error=request.args.get("error", ""), success=success,
+    )
 
 @app.route("/admin")
 def admin_page():
