@@ -403,6 +403,32 @@ select.ps:focus{border-color:var(--g)}
   </div>
 </div>
 
+<!-- PROMOTIONS PAGE -->
+<div id="page-promotions" class="page">
+  <div class="card">
+    <div class="ch"><div class="cht">📢 Pending Promotions (Tweet for Free Channel)</div>
+      <button class="btn sm" onclick="loadPromotions()">🔄 Refresh</button>
+    </div>
+    <table><thead><tr><th>User</th><th>Tweet URL</th><th>Status</th><th>Submitted</th><th>Actions</th></tr></thead>
+    <tbody id="promo-tbody"><tr><td colspan="5" style="text-align:center;color:var(--mt)">Loading...</td></tr></tbody></table>
+  </div>
+
+  <div class="card" style="margin-top:20px">
+    <div class="ch"><div class="cht">⚙️ System Promotion Settings</div></div>
+    <div style="padding:18px">
+      <p style="font-size:13px;color:var(--mt);margin-bottom:14px">Configure auto-posting to FinanceFlow's own Twitter when users upload videos.</p>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+        <div><label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase">Twitter API Key</label><input id="sys-tw-key" type="text" placeholder="SYSTEM_TWITTER_API_KEY env var" style="width:100%;margin-top:5px;padding:8px;background:var(--d);border:1px solid var(--b);border-radius:6px;color:var(--t);font-size:12px"></div>
+        <div><label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase">Auto-post on Upload</label>
+          <select id="sys-autopost" style="width:100%;margin-top:5px;padding:8px;background:var(--d);border:1px solid var(--b);border-radius:6px;color:var(--t);font-size:12px">
+            <option value="0">Disabled</option><option value="1">Enabled</option>
+          </select></div>
+      </div>
+      <button class="btn" style="margin-top:14px;background:linear-gradient(135deg,var(--g),var(--g2));color:#000;font-weight:700" onclick="saveSystemSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
 <div class="ts" id="toast"></div>
 
 <script>

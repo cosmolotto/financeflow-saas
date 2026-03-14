@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Started — FinanceFlow</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#050810;color:#e8eaf0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.card{background:#0a0f1e;border:1px solid #1f2937;border-radius:24px;padding:48px;max-width:560px;width:100%;text-align:center}
+.logo{font-weight:800;font-size:22px;color:#FFD700;margin-bottom:40px;display:block}
+.steps{display:flex;justify-content:center;gap:8px;margin-bottom:40px}
+.dot{width:32px;height:4px;border-radius:2px;background:#1f2937;transition:background 0.3s}
+.dot.active{background:#FFD700}
+.dot.done{background:#22c55e}
+h2{font-size:28px;font-weight:800;margin-bottom:12px}
+p{color:#6b7280;font-size:15px;margin-bottom:32px;line-height:1.6}
+.options{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:32px;text-align:left}
+.option{background:#111827;border:2px solid #1f2937;border-radius:12px;padding:16px;cursor:pointer;transition:all 0.2s}
+.option:hover,.option.selected{border-color:#FFD700;background:rgba(255,215,0,0.05)}
+.option-icon{font-size:28px;margin-bottom:8px}
+.option-name{font-weight:600;font-size:14px}
+.option-desc{color:#6b7280;font-size:12px;margin-top:4px}
+.btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;transition:all 0.2s}
+.btn-gold{background:linear-gradient(135deg,#FFD700,#FFA500);color:#000}
+.btn-gold:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(255,215,0,0.3)}
+.btn-outline{background:transparent;border:1px solid #374151;color:#9ca3af;margin-top:12px}
+.btn-outline:hover{border-color:#6b7280;color:#e8eaf0}
+.step-panel{display:none}
+.step-panel.active{display:block}
+.connect-btn{display:flex;align-items:center;justify-content:center;gap:12px;background:#dc2626;color:white;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;margin-bottom:16px;transition:all 0.2s}
+.connect-btn:hover{background:#b91c1c;transform:translateY(-1px)}
+.yt-icon{font-size:24px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;background:#111827;border:1px solid #1f2937;border-radius:12px;padding:16px;margin-bottom:12px}
+.toggle-label{font-size:14px;font-weight:600}
+.toggle-sub{font-size:12px;color:#6b7280;margin-top:2px}
+.tgl{position:relative;display:inline-block;width:44px;height:24px}
+.tgl input{opacity:0;width:0;height:0}
+.tgl-track{position:absolute;inset:0;background:#374151;border-radius:12px;cursor:pointer;transition:.3s}
+.tgl input:checked+.tgl-track{background:#FFD700}
+.tgl-track::before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s}
+.tgl input:checked+.tgl-track::before{transform:translateX(20px)}
+.success-icon{font-size:64px;margin-bottom:24px}
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="logo">Finance<span style="color:#e8eaf0">Flow</span></span>
+
+  <div class="steps">
+    <div class="dot active" id="d1"></div>
+    <div class="dot" id="d2"></div>
+    <div class="dot" id="d3"></div>
+  </div>
+
+  <!-- Step 1: Connect Channel -->
+  <div class="step-panel active" id="step1">
+    <div style="font-size:56px;margin-bottom:16px">📺</div>
+    <h2>Connect your YouTube channel</h2>
+    <p>FinanceFlow needs access to upload videos to your channel. We'll never delete or modify existing videos.</p>
+    <button class="connect-btn" onclick="connectChannel()">
+      <span class="yt-icon">▶</span> Connect YouTube Channel
+    </button>
+    <button class="btn btn-outline" onclick="skipStep()">Skip for now</button>
+  </div>
+
+  <!-- Step 2: Choose Niche -->
+  <div class="step-panel" id="step2">
+    <div style="font-size:56px;margin-bottom:16px">🎯</div>
+    <h2>Choose your niche</h2>
+    <p>Pick the finance topic that best matches your target audience. You can change this anytime.</p>
+    <div class="options" id="nicheOptions">
+      <div class="option selected" data-niche="personal_finance" onclick="selectNiche(this)">
+        <div class="option-icon">💰</div>
+        <div class="option-name">Personal Finance</div>
+        <div class="option-desc">Budgeting, saving, debt payoff</div>
+      </div>
+      <div class="option" data-niche="investing" onclick="selectNiche(this)">
+        <div class="option-icon">📈</div>
+        <div class="option-name">Investing</div>
+        <div class="option-desc">Stocks, ETFs, index funds</div>
+      </div>
+      <div class="option" data-niche="crypto" onclick="selectNiche(this)">
+        <div class="option-icon">₿</div>
+        <div class="option-name">Crypto</div>
+        <div class="option-desc">Bitcoin, altcoins, DeFi</div>
+      </div>
+      <div class="option" data-niche="real_estate" onclick="selectNiche(this)">
+        <div class="option-icon">🏠</div>
+        <div class="option-name">Real Estate</div>
+        <div class="option-desc">REITs, house hacking, rentals</div>
+      </div>
+      <div class="option" data-niche="side_hustle" onclick="selectNiche(this)">
+        <div class="option-icon">🚀</div>
+        <div class="option-name">Side Hustles</div>
+        <div class="option-desc">Income, freelancing, gigs</div>
+      </div>
+      <div class="option" data-niche="tax" onclick="selectNiche(this)">
+        <div class="option-icon">🧾</div>
+        <div class="option-name">Tax Tips</div>
+        <div class="option-desc">Deductions, savings, strategy</div>
+      </div>
+    </div>
+    <button class="btn btn-gold" onclick="nextStep(3)">Continue →</button>
+  </div>
+
+  <!-- Step 3: Activate Autopilot -->
+  <div class="step-panel" id="step3">
+    <div style="font-size:56px;margin-bottom:16px">🤖</div>
+    <h2>Activate Autopilot</h2>
+    <p>Let FinanceFlow post daily on autopilot. Channels that post consistently grow 10x faster.</p>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">📅 Daily Autopilot</div>
+        <div class="toggle-sub">Post 1 Short every day automatically</div>
+      </div>
+      <label class="tgl"><input type="checkbox" id="autopilotToggle" checked><span class="tgl-track"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">📱 Cross-Post to Twitter</div>
+        <div class="toggle-sub">Share videos to Twitter automatically</div>
+      </div>
+      <label class="tgl"><input type="checkbox" id="twitterToggle"><span class="tgl-track"></span></label>
+    </div>
+    <button class="btn btn-gold" onclick="finishOnboarding()" style="margin-top:20px">
+      🚀 Start Growing My Channel
+    </button>
+  </div>
+
+  <!-- Complete -->
+  <div class="step-panel" id="stepDone">
+    <div class="success-icon">🎉</div>
+    <h2>You're all set!</h2>
+    <p>Your channel is connected and autopilot is active. Your first video will be generated within 24 hours.</p>
+    <button class="btn btn-gold" onclick="window.location.href='/dashboard'">Go to Dashboard →</button>
+  </div>
+</div>
+
+<script>
+let selectedNiche = 'personal_finance';
+const tok = localStorage.getItem('ff_token') || '';
+
+function getHeaders() {
+  return {'Content-Type':'application/json', 'Authorization': 'Bearer ' + tok};
+}
+
+function nextStep(n) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+  document.querySelectorAll('.dot').forEach((d,i) => {
+    d.className = 'dot' + (i < n-1 ? ' done' : i === n-1 ? ' active' : '');
+  });
+}
+
+function connectChannel() {
+  window.location.href = '/api/channels/connect';
+}
+
+function skipStep() {
+  nextStep(2);
+}
+
+function selectNiche(el) {
+  document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedNiche = el.dataset.niche;
+}
+
+async function finishOnboarding() {
+  const autopilot = document.getElementById('autopilotToggle').checked;
+  try {
+    // Mark onboarding complete
+    await fetch('/api/account/onboarding-complete', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ niche: selectedNiche, autopilot })
+    });
+  } catch(e) {}
+  nextStep(4);
+  setTimeout(() => {
+    document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('stepDone').classList.add('active');
+  }, 100);
+}
+
+// If came back from YouTube OAuth, advance to step 2
+if (window.location.search.includes('connected=1')) {
+  nextStep(2);
+}
+</script>
+</body>
+</html>

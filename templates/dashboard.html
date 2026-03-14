@@ -211,6 +211,18 @@ tr:hover td{background:rgba(255,255,255,0.01)}
   </div>
 
   <div class="cnt">
+    {% if user.trial_active %}
+    <div style="background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.08));border:1px solid rgba(255,215,0,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>⚡ <strong>Pro Trial Active</strong> — {{ user.trial_days_left }} day{{ 's' if user.trial_days_left != 1 else '' }} left
+        {% if user.is_founding %} &nbsp;🌟 <strong>Founding Member</strong>{% endif %}</div>
+      <button class="btn bg sm" onclick="showTab('billing')">Upgrade to Keep Pro →</button>
+    </div>
+    {% endif %}
+    {% if user.is_first_user %}
+    <div style="background:linear-gradient(135deg,rgba(168,85,247,0.12),rgba(139,92,246,0.08));border:1px solid rgba(168,85,247,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px">
+      👑 <strong>Original Creator</strong> — You are FinanceFlow's first ever user. Lifetime Agency plan, forever free.
+    </div>
+    {% endif %}
     {% if success=='channel_connected' %}<div class="al aok">✅ YouTube channel connected successfully!</div>{% endif %}
     {% if error %}<div class="al aer">❌ {{ error.replace('_',' ').title() }}</div>{% endif %}
 
@@ -526,6 +538,33 @@ tr:hover td{background:rgba(255,255,255,0.01)}
           <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Run in Terminal 2 for videos to generate.</p>
           <div style="font-family:monospace;font-size:12px;background:var(--dark);padding:10px;border-radius:8px;border:1px solid var(--border);color:var(--gold);line-height:1.8">cd ~/Downloads/saas<br>python3 worker.py</div>
           <p style="font-size:12px;color:var(--muted);margin-top:10px">Port conflict? <span style="color:var(--gold);font-family:monospace">lsof -ti:5000 | xargs kill</span></p>
+        </div>
+      </div>
+      <!-- Referral section -->
+      <div style="margin-top:20px">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:14px">🎁 Refer & Earn</div>
+        <div class="sg2">
+          <div class="sk"><h4>Your Referral Link</h4>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Share this link. When someone signs up, you both win.</p>
+            <div style="background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:monospace;font-size:12px;color:var(--gold);word-break:break-all" id="ref-link">{{ user.referral_url }}</div>
+            <button class="btn bg sm" style="margin-top:8px" onclick="navigator.clipboard.writeText('{{ user.referral_url }}').then(()=>alert('Link copied!'))">📋 Copy Link</button>
+          </div>
+          <div class="sk"><h4>Referral Progress</h4>
+            <div style="font-size:24px;font-weight:800;color:var(--gold);margin-bottom:4px">{{ user.total_referrals }}</div>
+            <div style="color:var(--muted);font-size:12px;margin-bottom:14px">Total referrals</div>
+            {% for t, r, d in [(1,'1 week Pro',7),(3,'1 month Pro',30),(10,'3 months Agency',90),(25,'Lifetime Pro',36500)] %}
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+              <div style="font-size:12px">{{ t }} referral{{ 's' if t > 1 else '' }} → <strong>{{ r }}</strong></div>
+              <div style="font-size:11px;color:{% if user.total_referrals >= t %}var(--green){% else %}var(--muted){% endif %}">{% if user.total_referrals >= t %}✅ Earned{% else %}{{ user.total_referrals }}/{{ t }}{% endif %}</div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="sk"><h4>📢 Promote for Free Channel</h4>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Tweet about FinanceFlow with <strong>#FinanceFlow</strong> and get an extra channel slot free.</p>
+            <div class="fd"><label>Tweet URL</label><input type="text" id="promo-url" placeholder="https://twitter.com/..."></div>
+            <button class="btn bg sm" onclick="submitPromotion()">Submit for Review</button>
+            <div id="promo-msg" style="margin-top:8px;font-size:12px;display:none"></div>
+          </div>
         </div>
       </div>
       <!-- My Brand section -->
@@ -853,6 +892,14 @@ async function submitPayment(){
 }
 async function changePw(){const r=await fetch('/api/account/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current:document.getElementById('pw-cur').value,new:document.getElementById('pw-new').value})});const d=await r.json();if(d.success){toast('Password updated ✅');document.getElementById('pw-cur').value='';document.getElementById('pw-new').value='';}else toast(d.error,'er');}
 async function doLogout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/';}
+async function submitPromotion(){
+  const url=document.getElementById('promo-url').value.trim();
+  const msg=document.getElementById('promo-msg');
+  const r=await fetch('/api/promotions/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tweet_url:url})});
+  const d=await r.json(); msg.style.display='block';
+  if(d.success){msg.style.color='var(--green)';msg.textContent=d.message;toast('Promotion submitted!');}
+  else{msg.style.color='var(--red)';msg.textContent=d.error;toast(d.error,'er');}
+}
 
 // REAL-TIME POLL
 function mkP(s){return({'uploaded':'pu','pending':'pp','processing':'ppr','failed':'pf','cancelled':'pc'})[s]||'pc';}

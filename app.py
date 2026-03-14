@@ -1869,6 +1869,15 @@ def upload_avatar():
 def upload_logo():
     return _upload_file("logo")
 
+@app.route("/api/account/onboarding-complete", methods=["POST"])
+@login_required
+def onboarding_complete():
+    d  = request.get_json() or {}
+    db = get_db()
+    db.execute("UPDATE users SET onboarding_complete=1 WHERE id=?", (request.uid,))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
 @app.route("/api/account/clone-voice", methods=["POST"])
 @login_required
 def clone_voice():
