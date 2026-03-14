@@ -85,11 +85,13 @@ PLANS = {
 
 # ── Stripe setup ──────────────────────────────────────────────────────────────
 if HAS_STRIPE and STRIPE_KEY:
+    pass
     stripe_lib.api_key = STRIPE_KEY
 
 # ── Celery/Redis setup ────────────────────────────────────────────────────────
 celery_app = None
 if HAS_CELERY and REDIS_URL:
+    pass
     celery_app = _Celery("financeflow", broker=REDIS_URL, backend=REDIS_URL)
     celery_app.conf.update(
         task_serializer="json", result_serializer="json", accept_content=["json"]
@@ -100,6 +102,7 @@ else:
 
 # ── Rate limiting (optional) ──────────────────────────────────────────────────
 if HAS_LIMITER:
+    pass
     limiter = Limiter(key_func=get_remote_address, app=app,
                       default_limits=["200 per day", "50 per hour"])
 else:
@@ -542,6 +545,7 @@ def generate_script(prompt, niche="personal_finance", video_type="short"):
 
 # ── Celery task ───────────────────────────────────────────────────────────────
 if celery_app:
+    pass
     @celery_app.task(name="financeflow.process_video")
     def process_video_task(job_id):
         """Generate script and queue for upload."""
@@ -2080,4 +2084,5 @@ threading.Thread(target=_email_sequence_worker, daemon=True).start()
 threading.Thread(target=_trial_expiry_worker, daemon=True).start()
 
 if __name__ == "__main__":
+    pass
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
