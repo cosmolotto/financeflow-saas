@@ -121,6 +121,7 @@ select.ps:focus{border-color:var(--g)}
     <button class="tab" onclick="showTab('videos',this)">🎬 Videos</button>
     <button class="tab" onclick="showTab('social',this)">🌐 Social Keys</button>
     <button class="tab" onclick="showTab('payments',this)">💳 Payments<span id="pay-badge" style="display:none;background:rgba(245,158,11,0.2);color:#f59e0b;font-size:9px;padding:1px 5px;border-radius:100px;margin-left:5px;font-weight:700">0</span></button>
+    <button class="tab" onclick="showTab('promotions',this)">📢 Promotions</button>
     <button class="tab" onclick="showTab('system',this)">⚙️ System</button>
   </div>
   <div class="nav-r">
@@ -439,6 +440,7 @@ function showTab(n,el){
   const page=document.getElementById('page-'+n);if(page)page.classList.add('on');
   if(el)el.classList.add('on');
   if(n==='payments')loadPayments();
+  if(n==='promotions')loadPromotions();
 }
 function toast(msg,t='ok'){const e=document.getElementById('toast');e.textContent=msg;e.className='ts '+t+' show';setTimeout(()=>e.classList.remove('show'),4000);}
 
@@ -465,6 +467,33 @@ function filterUsers(){
   });
 }
 async function doLogout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/';}
+async function loadPromotions(){
+  const tb=document.getElementById('promo-tbody');
+  try{
+    const r=await fetch('/api/admin/promotions');const d=await r.json();
+    if(!d.length){tb.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--mt)">No promotions yet</td></tr>';return;}
+    tb.innerHTML=d.map(p=>`<tr>
+      <td>${p.email||p.user_id}</td>
+      <td><a href="${p.tweet_url}" target="_blank" style="color:var(--g)">${(p.tweet_url||'').slice(0,50)}...</a></td>
+      <td><span style="color:${p.status==='approved'?'var(--ok)':p.status==='rejected'?'var(--er)':'var(--g)'}">${p.status}</span></td>
+      <td style="font-size:11px">${(p.created_at||'').slice(0,10)}</td>
+      <td>${p.status==='pending'?`<button class="btn sm" onclick="reviewPromo(${p.id},'approve')" style="background:var(--ok);color:#000;border:none">✅ Approve</button>
+        <button class="btn sm" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--er);margin-left:6px" onclick="reviewPromo(${p.id},'reject')">❌ Reject</button>`:'—'}</td>
+    </tr>`).join('');
+  }catch(e){tb.innerHTML='<tr><td colspan="5" style="color:var(--er)">Error loading promotions</td></tr>';}
+}
+async function reviewPromo(id,action){
+  const r=await fetch(`/api/admin/promotions/${id}/${action}`,{method:'POST'});
+  const d=await r.json();
+  if(d.success){toast(action==='approve'?'✅ Promotion approved — channel granted!':'Promotion rejected');loadPromotions();}
+  else toast(d.error,'er');
+}
+async function saveSystemSettings(){
+  const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({twitter_api_key:document.getElementById('sys-tw-key').value,auto_post_on_upload:document.getElementById('sys-autopost').value})});
+  const d=await r.json();
+  if(d.success)toast('✅ Settings saved!');else toast(d.error||'Save failed','er');
+}
 
 async function loadPayments(){
   const el=document.getElementById('payments-table');
