@@ -303,7 +303,6 @@ def init_db():
         );
     """)
     db.commit()
-    db.close()
     migrate_db()
 
 def migrate_db():
@@ -346,7 +345,6 @@ def migrate_db():
     except Exception:
         pass
     db.commit()
-    db.close()
 
 def worker_online_status():
     HBEAT = "worker_heartbeat.txt"
@@ -569,7 +567,6 @@ if celery_app:
             db.commit()
             return {"error": str(e)}
         finally:
-            db.close()
 else:
     def process_video_task(job_id):
         pass  # SQLite worker.py handles it
@@ -580,7 +577,6 @@ def landing():
     db = get_db()
     user_count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     founding_spots = max(0, 100 - user_count)
-    db.close()
     show_reset = bool(request.args.get("show_reset"))
     reset_token = request.args.get("token", "")
     return render_template("landing.html", plans=PLANS, user_count=user_count,
@@ -638,7 +634,6 @@ def dashboard():
         "FROM users WHERE id=?", (user["user_id"],)
     ).fetchone()
     if not u:
-        db.close()
         return redirect("/")
 
     is_admin  = bool(u["is_admin"])
@@ -708,7 +703,6 @@ def dashboard():
     ).fetchall():
         social.setdefault(row["channel_id"], []).append(dict(row))
 
-    db.close()
 
     stats = {
         "total":    len(videos),
@@ -785,7 +779,6 @@ def admin_page():
     videos_list  = [dict(r) for r in raw_vids]
     admin_row    = db.execute("SELECT email FROM users WHERE id=?", (user["user_id"],)).fetchone()
     admin_email  = admin_row["email"] if admin_row else ""
-    db.close()
     # Read social keys from DB (system_settings) with file fallback for backwards compat
     social_keys = {}
     try:
@@ -875,7 +868,6 @@ def register():
         print(f"[REGISTER ERROR] {e}")
         return jsonify({"error": "Internal server error", "detail": str(e)}), 500
     finally:
-        db.close()
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
@@ -889,7 +881,6 @@ def login():
         user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
         if user and not check_pw(password, user["password_hash"]):
             user = None
-        db.close()
         if not user:
             print(f"[LOGIN] No user found for email={email!r}")
             return jsonify({"error": "Invalid email or password"}), 401
@@ -929,7 +920,6 @@ def forgot_password():
                 Reset Password →
             </a>
             </div>""")
-    db.close()
     return jsonify({"status": "If that email exists, a reset link has been sent"})
 
 @app.route("/api/auth/reset-password", methods=["POST"])
@@ -943,11 +933,9 @@ def do_reset_password():
     user = db.execute("SELECT * FROM users WHERE reset_token=? AND reset_expires>?",
                       (token, int(time.time()))).fetchone()
     if not user:
-        db.close()
         return jsonify({"error": "Invalid or expired reset link"}), 400
     db.execute("UPDATE users SET password_hash=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
                (hash_pw(new_pass), user["id"]))
-    db.commit(); db.close()
     return jsonify({"status": "Password updated successfully"})
 
 @app.route("/api/auth/me")
@@ -956,7 +944,6 @@ def me():
     db   = get_db()
     user = db.execute("SELECT id, email, full_name, plan, created_at FROM users WHERE id=?",
                       (request.uid,)).fetchone()
-    db.close()
     return jsonify(dict(user)) if user else (jsonify({"error": "Not found"}), 404)
 
 # ── YouTube OAuth ─────────────────────────────────────────────────────────────
@@ -1058,7 +1045,6 @@ def channel_callback():
     db.commit()
     token = make_token(user_id)
     session["token"] = token
-    db.close()
     return redirect("/dashboard?connected=1")
 
 # ── Channel API ───────────────────────────────────────────────────────────────
@@ -1070,7 +1056,6 @@ def get_channels():
         "SELECT id, channel_name, youtube_channel_id, niche, video_type, schedule, videos_uploaded, created_at "
         "FROM channels WHERE user_id=? AND active=1 ORDER BY created_at DESC", (request.uid,)
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/channels/<int:cid>", methods=["PUT"])
@@ -1080,7 +1065,6 @@ def update_channel(cid):
     db = get_db()
     db.execute("UPDATE channels SET niche=?, video_type=?, schedule=? WHERE id=? AND user_id=?",
                (d.get("niche"), d.get("video_type"), d.get("schedule"), cid, request.uid))
-    db.commit(); db.close()
     return jsonify({"status": "updated"})
 
 @app.route("/api/channels/<int:cid>/sync", methods=["POST"])
@@ -1090,7 +1074,6 @@ def sync_channel(cid):
     ch = db.execute("SELECT * FROM channels WHERE id=? AND user_id=?",
                     (cid, request.uid)).fetchone()
     if not ch:
-        db.close(); return jsonify({"error": "Not found"}), 404
     try:
         from worker import refresh_yt_token
         token = refresh_yt_token(ch["refresh_token"])
@@ -1108,17 +1091,14 @@ def sync_channel(cid):
             (int(stats.get("subscriberCount", 0)), int(stats.get("viewCount", 0)),
              int(stats.get("videoCount", 0)), pic, cid)
         )
-        db.commit(); db.close()
         return jsonify({"success": True, "subscriber_count": int(stats.get("subscriberCount", 0))})
     except Exception as e:
-        db.close(); return jsonify({"error": str(e)}), 500
 
 @app.route("/api/channels/<int:cid>", methods=["DELETE"])
 @login_required
 def delete_channel(cid):
     db = get_db()
     db.execute("UPDATE channels SET active=0 WHERE id=? AND user_id=?", (cid, request.uid))
-    db.commit(); db.close()
     return jsonify({"status": "deleted"})
 
 # ── Video / Queue API ─────────────────────────────────────────────────────────
@@ -1135,7 +1115,6 @@ def generate_video():
     ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?",
                     (channel_id, request.uid)).fetchone()
     if not ch:
-        db.close()
         return jsonify({"error": "Channel not found"}), 404
     # Server-side plan gating
     user_row = db.execute("SELECT plan, COALESCE(trial_ends_at,0) AS trial_ends_at FROM users WHERE id=?",
@@ -1145,7 +1124,6 @@ def generate_video():
     effective_plan = "pro" if (trial_active and plan_key == "starter") else plan_key
     limits = PLANS.get(effective_plan, PLANS["starter"])
     if not limits.get("custom_prompts") and custom_prompt:
-        db.close()
         return jsonify({"error": "Custom prompts require Pro plan"}), 403
     if limits["videos_per_week"] < 999:
         from datetime import datetime, timedelta
@@ -1155,13 +1133,11 @@ def generate_video():
             (request.uid, week_ago)
         ).fetchone()[0]
         if week_count >= limits["videos_per_week"]:
-            db.close()
             return jsonify({"error": f"Weekly limit of {limits['videos_per_week']} videos reached. Upgrade to generate more."}), 429
     job_id = db.execute(
         "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_prompt, custom_title) VALUES (?,?,?,?,?,?)",
         (request.uid, channel_id, video_type, niche, custom_prompt, custom_title)
     ).lastrowid
-    db.commit(); db.close()
     if celery_app:
         process_video_task.delay(job_id)
         return jsonify({"success": True, "job_id": job_id, "status": "queued", "queue": "celery"})
@@ -1193,7 +1169,6 @@ def get_queue():
         "SELECT q.*, c.channel_name FROM queue q LEFT JOIN channels c ON q.channel_id=c.id "
         "WHERE q.user_id=? ORDER BY q.created_at DESC LIMIT 30", (request.uid,)
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/videos/status/<int:job_id>")
@@ -1202,7 +1177,6 @@ def job_status(job_id):
     db  = get_db()
     job = db.execute("SELECT * FROM queue WHERE id=? AND user_id=?",
                      (job_id, request.uid)).fetchone()
-    db.close()
     return jsonify(dict(job)) if job else (jsonify({"error": "Not found"}), 404)
 
 @app.route("/api/videos")
@@ -1213,7 +1187,6 @@ def get_videos():
         "SELECT v.*, c.channel_name FROM videos v LEFT JOIN channels c ON v.channel_id=c.id "
         "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50", (request.uid,)
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 # ── Social API ────────────────────────────────────────────────────────────────
@@ -1223,7 +1196,6 @@ def get_social(cid):
     db   = get_db()
     rows = db.execute("SELECT id, platform, active FROM social_accounts WHERE channel_id=?",
                       (cid,)).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/social/<int:cid>", methods=["POST"])
@@ -1241,7 +1213,6 @@ def save_social(cid):
     else:
         db.execute("INSERT INTO social_accounts (channel_id, platform, credentials) VALUES (?,?,?)",
                    (cid, platform, credentials))
-    db.commit(); db.close()
     return jsonify({"status": "saved"})
 
 # ── Prompts API ───────────────────────────────────────────────────────────────
@@ -1251,7 +1222,6 @@ def get_prompts():
     db   = get_db()
     rows = db.execute("SELECT * FROM prompts WHERE user_id=? ORDER BY created_at DESC",
                       (request.uid,)).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/prompts", methods=["POST"])
@@ -1268,7 +1238,6 @@ def create_prompt():
         "INSERT INTO prompts (user_id, title, body, niche) VALUES (?,?,?,?)",
         (request.uid, title, body, niche)
     ).lastrowid
-    db.commit(); db.close()
     return jsonify({"success": True, "id": pid})
 
 @app.route("/api/prompts/<int:pid>", methods=["DELETE"])
@@ -1276,7 +1245,6 @@ def create_prompt():
 def delete_prompt(pid):
     db = get_db()
     db.execute("DELETE FROM prompts WHERE id=? AND user_id=?", (pid, request.uid))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 # ── Referral API ───────────────────────────────────────────────────────────────
@@ -1286,7 +1254,6 @@ def referral_stats():
     db    = get_db()
     user  = db.execute("SELECT referral_code FROM users WHERE id=?", (request.uid,)).fetchone()
     count = db.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id=?", (request.uid,)).fetchone()[0]
-    db.close()
     code = user["referral_code"] if user else ""
     tiers = [
         {"threshold": 1,  "reward": "1 week Pro",     "reached": count >= 1},
@@ -1315,11 +1282,9 @@ def submit_promotion():
         "SELECT id FROM promotions WHERE user_id=? AND status='pending'", (request.uid,)
     ).fetchone()
     if existing:
-        db.close()
         return jsonify({"error": "You already have a pending promotion review"}), 400
     db.execute("INSERT INTO promotions (user_id, tweet_url) VALUES (?,?)",
                (request.uid, tweet_url))
-    db.commit(); db.close()
     return jsonify({"success": True, "message": "Submitted! Admin will review within 48h."})
 
 # ── Stats API ─────────────────────────────────────────────────────────────────
@@ -1332,7 +1297,6 @@ def stats():
     pending    = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'", (request.uid,)).fetchone()[0]
     processing = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='processing'", (request.uid,)).fetchone()[0]
     user       = db.execute("SELECT plan FROM users WHERE id=?", (request.uid,)).fetchone()
-    db.close()
     plan = user["plan"] if user else "starter"
     return jsonify({
         "channels": channels, "videos_uploaded": uploaded,
@@ -1359,7 +1323,6 @@ def payment_request():
         "INSERT INTO payments (user_id, amount, plan, provider, payment_method, reference, status) VALUES (?,?,?,?,?,?,'pending')",
         (request.uid, amount, plan, provider, provider, reference)
     ).lastrowid
-    db.commit(); db.close()
     if reference:
         db2 = get_db()
         db2.execute("UPDATE payments SET status='submitted', reference=? WHERE id=?", (reference, payment_id))
@@ -1406,7 +1369,6 @@ def payment_manual():
             (request.uid,)
         ).fetchone()
     if not payment:
-        db.close()
         return jsonify({"error": "No pending payment found. Use /api/payments/request first"}), 404
     db.execute(
         "UPDATE payments SET reference=?, notes=?, status='submitted', updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -1415,7 +1377,6 @@ def payment_manual():
     db.commit()
     admin = db.execute("SELECT email FROM users WHERE is_admin=1 LIMIT 1").fetchone()
     user  = db.execute("SELECT email, full_name FROM users WHERE id=?", (request.uid,)).fetchone()
-    db.close()
     if admin:
         send_email(
             admin["email"], "Admin",
@@ -1446,7 +1407,6 @@ def payment_status():
         "FROM payments WHERE user_id=? ORDER BY created_at DESC LIMIT 10",
         (request.uid,)
     ).fetchall()
-    db.close()
     return jsonify({"payments": [dict(r) for r in rows]})
 
 @app.route("/api/payments/stripe-checkout", methods=["POST"])
@@ -1513,7 +1473,6 @@ def stripe_webhook():
             )
             db.commit()
             user = db.execute("SELECT email, full_name FROM users WHERE id=?", (user_id,)).fetchone()
-            db.close()
             if user:
                 send_email(
                     user["email"], user["full_name"],
@@ -1530,7 +1489,6 @@ def stripe_webhook():
         if sub_id:
             db = get_db()
             db.execute("UPDATE users SET plan='starter' WHERE stripe_subscription_id=?", (sub_id,))
-            db.commit(); db.close()
     return jsonify({"status": "ok"})
 
 # ── Admin payment API ─────────────────────────────────────────────────────────
@@ -1543,7 +1501,6 @@ def admin_payments():
         "LEFT JOIN users u ON p.user_id=u.id "
         "ORDER BY p.created_at DESC LIMIT 100"
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/admin/payments/<int:pid>/approve", methods=["POST"])
@@ -1552,13 +1509,11 @@ def admin_approve_payment(pid):
     db      = get_db()
     payment = db.execute("SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
     if not payment:
-        db.close()
         return jsonify({"error": "Payment not found"}), 404
     db.execute("UPDATE payments SET status='approved', updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
     db.execute("UPDATE users SET plan=? WHERE id=?", (payment["plan"], payment["user_id"]))
     db.commit()
     user = db.execute("SELECT email, full_name FROM users WHERE id=?", (payment["user_id"],)).fetchone()
-    db.close()
     if user:
         send_email(
             user["email"], user["full_name"],
@@ -1580,7 +1535,6 @@ def admin_reject_payment(pid):
     db      = get_db()
     payment = db.execute("SELECT * FROM payments WHERE id=?", (pid,)).fetchone()
     if not payment:
-        db.close()
         return jsonify({"error": "Payment not found"}), 404
     db.execute(
         "UPDATE payments SET status='rejected', notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -1588,7 +1542,6 @@ def admin_reject_payment(pid):
     )
     db.commit()
     user = db.execute("SELECT email, full_name FROM users WHERE id=?", (payment["user_id"],)).fetchone()
-    db.close()
     if user:
         send_email(
             user["email"], user["full_name"],
@@ -1614,7 +1567,6 @@ def create_admin():
                    (email, hash_pw(password)))
     except sqlite3.IntegrityError:
         db.execute("UPDATE users SET is_admin=1 WHERE email=?", (email,))
-    db.commit(); db.close()
     return jsonify({"status": "admin created"})
 
 @app.route("/api/admin/stats")
@@ -1630,7 +1582,6 @@ def admin_stats():
     growth        = db.execute("SELECT COUNT(*) FROM users WHERE plan='growth'").fetchone()[0]
     queue_pending = db.execute("SELECT COUNT(*) FROM queue WHERE status IN ('pending','processing')").fetchone()[0]
     pending_pays  = db.execute("SELECT COUNT(*) FROM payments WHERE status IN ('pending','submitted')").fetchone()[0]
-    db.close()
     return jsonify({
         "total_users":      total_users,
         "total_videos":     total_vids,
@@ -1652,7 +1603,6 @@ def admin_users():
     rows = db.execute(
         "SELECT id, email, full_name, plan, is_admin, created_at FROM users ORDER BY created_at DESC"
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/admin/users/<int:uid>/plan", methods=["PUT", "POST"])
@@ -1661,7 +1611,6 @@ def admin_set_plan(uid):
     d  = request.get_json() or {}
     db = get_db()
     db.execute("UPDATE users SET plan=? WHERE id=?", (d.get("plan", "starter"), uid))
-    db.commit(); db.close()
     return jsonify({"status": "updated"})
 
 @app.route("/api/admin/users/<int:uid>", methods=["DELETE"])
@@ -1671,7 +1620,6 @@ def admin_delete_user(uid):
     # Prevent deleting other admins
     target = db.execute("SELECT is_admin FROM users WHERE id=?", (uid,)).fetchone()
     if target and target["is_admin"]:
-        db.close()
         return jsonify({"error": "Cannot delete admin accounts"}), 403
     # Cascade delete
     db.execute("DELETE FROM queue    WHERE user_id=?", (uid,))
@@ -1682,7 +1630,6 @@ def admin_delete_user(uid):
     db.execute("DELETE FROM email_sequences WHERE user_id=?", (uid,))
     db.execute("DELETE FROM promotions WHERE user_id=?", (uid,))
     db.execute("DELETE FROM users    WHERE id=?", (uid,))
-    db.commit(); db.close()
     return jsonify({"status": "deleted"})
 
 @app.route("/api/admin/channels")
@@ -1693,7 +1640,6 @@ def admin_channels():
         "SELECT c.*, u.email FROM channels c LEFT JOIN users u ON c.user_id=u.id "
         "WHERE c.active=1 ORDER BY c.created_at DESC"
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/admin/videos")
@@ -1706,7 +1652,6 @@ def admin_videos():
         "LEFT JOIN channels c ON v.channel_id=c.id "
         "ORDER BY v.created_at DESC LIMIT 100"
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/admin/social-keys", methods=["POST"])
@@ -1725,7 +1670,6 @@ def admin_save_social_keys():
             db.execute("UPDATE system_settings SET value=? WHERE key='social_keys'", (val,))
         else:
             db.execute("INSERT INTO system_settings (key, value) VALUES ('social_keys',?)", (val,))
-        db.commit(); db.close()
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1758,7 +1702,6 @@ def queue_status():
     total    = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=?", (request.uid,)).fetchone()[0]
     uploaded = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'", (request.uid,)).fetchone()[0]
     pending  = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'", (request.uid,)).fetchone()[0]
-    db.close()
     return jsonify({
         "queue":         [dict(r) for r in q_rows],
         "videos":        [dict(r) for r in v_rows],
@@ -1772,7 +1715,6 @@ def cancel_job(jid):
     db = get_db()
     db.execute("UPDATE queue SET status='cancelled' WHERE id=? AND user_id=? AND status='pending'",
                (jid, request.uid))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 # ── Channel settings / social / autopilot / monetized ────────────────────────
@@ -1783,12 +1725,10 @@ def channel_settings(cid):
     db = get_db()
     ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?", (cid, request.uid)).fetchone()
     if not ch:
-        db.close(); return jsonify({"error": "Not found"}), 404
     db.execute(
         "UPDATE channels SET niche=?, video_type=?, schedule=? WHERE id=? AND user_id=?",
         (d.get("niche"), d.get("voice_style"), d.get("upload_schedule"), cid, request.uid)
     )
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 @app.route("/api/channels/<int:cid>/social", methods=["GET"])
@@ -1797,7 +1737,6 @@ def get_channel_social(cid):
     db   = get_db()
     rows = db.execute("SELECT platform, active FROM social_accounts WHERE channel_id=? AND active=1",
                       (cid,)).fetchall()
-    db.close()
     return jsonify({r["platform"]: {"active": r["active"]} for r in rows})
 
 @app.route("/api/channels/<int:cid>/social", methods=["POST"])
@@ -1815,7 +1754,6 @@ def save_channel_social(cid):
     else:
         db.execute("INSERT INTO social_accounts (channel_id, platform, credentials) VALUES (?,?,?)",
                    (cid, platform, credentials))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 @app.route("/api/channels/<int:cid>/social/<platform>", methods=["DELETE"])
@@ -1824,7 +1762,6 @@ def delete_channel_social(cid, platform):
     db = get_db()
     db.execute("UPDATE social_accounts SET active=0 WHERE channel_id=? AND platform=?",
                (cid, platform))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 @app.route("/api/channels/<int:cid>/autopilot", methods=["POST"])
@@ -1835,7 +1772,6 @@ def toggle_autopilot(cid):
     db = get_db()
     db.execute("UPDATE channels SET autopilot=? WHERE id=? AND user_id=?",
                (enabled, cid, request.uid))
-    db.commit(); db.close()
     return jsonify({"success": True, "autopilot": bool(enabled)})
 
 @app.route("/api/channels/<int:cid>/monetized", methods=["POST"])
@@ -1846,7 +1782,6 @@ def mark_monetized(cid):
     db = get_db()
     db.execute("UPDATE channels SET monetized=? WHERE id=? AND user_id=?",
                (monetized, cid, request.uid))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 # ── Account: password / branding / uploads / voice clone ─────────────────────
@@ -1862,9 +1797,7 @@ def change_password():
     u_row = db.execute("SELECT id, password_hash FROM users WHERE id=?", (request.uid,)).fetchone()
     u = u_row if u_row and check_pw(cur, u_row["password_hash"]) else None
     if not u:
-        db.close(); return jsonify({"error": "Current password incorrect"}), 400
     db.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_pw(new_pw), request.uid))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 @app.route("/api/account/branding", methods=["GET"])
@@ -1875,7 +1808,6 @@ def get_branding():
         "SELECT brand_color_primary, brand_color_accent, avatar_path, logo_path, custom_voice_id "
         "FROM users WHERE id=?", (request.uid,)
     ).fetchone()
-    db.close()
     return jsonify(dict(u)) if u else (jsonify({"error": "Not found"}), 404)
 
 @app.route("/api/account/branding", methods=["POST"])
@@ -1887,7 +1819,6 @@ def save_branding():
         "UPDATE users SET brand_color_primary=?, brand_color_accent=? WHERE id=?",
         (d.get("brand_color_primary", "#FFD700"), d.get("brand_color_accent", "#FFA500"), request.uid)
     )
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -1905,7 +1836,6 @@ def _upload_file(ftype):
     db  = get_db()
     col = "avatar_path" if ftype == "avatar" else "logo_path"
     db.execute(f"UPDATE users SET {col}=? WHERE id=?", (url, request.uid))
-    db.commit(); db.close()
     return jsonify({"success": True, "url": url})
 
 @app.route("/api/account/upload-avatar", methods=["POST"])
@@ -1924,7 +1854,6 @@ def onboarding_complete():
     d  = request.get_json() or {}
     db = get_db()
     db.execute("UPDATE users SET onboarding_complete=1 WHERE id=?", (request.uid,))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 @app.route("/api/account/clone-voice", methods=["POST"])
@@ -1955,7 +1884,6 @@ def clone_voice():
             voice_id = json.loads(r.read()).get("voice_id", "")
         db = get_db()
         db.execute("UPDATE users SET custom_voice_id=? WHERE id=?", (voice_id, request.uid))
-        db.commit(); db.close()
         return jsonify({"success": True, "voice_id": voice_id})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1978,7 +1906,6 @@ def admin_create_admin():
         )
     except sqlite3.IntegrityError:
         db.execute("UPDATE users SET is_admin=1, plan='admin' WHERE email=?", (email,))
-    db.commit(); db.close()
     return jsonify({"success": True, "message": f"Admin {email} created"})
 
 @app.route("/api/admin/channels/<int:cid>/autopilot", methods=["POST"])
@@ -1988,7 +1915,6 @@ def admin_toggle_autopilot(cid):
     enabled = 1 if d.get("enabled") else 0
     db = get_db()
     db.execute("UPDATE channels SET autopilot=? WHERE id=?", (enabled, cid))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 @app.route("/api/admin/channels/<int:cid>/monetized", methods=["POST"])
@@ -1998,7 +1924,6 @@ def admin_mark_monetized(cid):
     monetized = 1 if d.get("monetized") else 0
     db = get_db()
     db.execute("UPDATE channels SET monetized=? WHERE id=?", (monetized, cid))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 # ── Admin promotions ──────────────────────────────────────────────────────────
@@ -2010,7 +1935,6 @@ def admin_promotions():
         "SELECT p.*, u.email FROM promotions p LEFT JOIN users u ON p.user_id=u.id "
         "ORDER BY p.created_at DESC"
     ).fetchall()
-    db.close()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/admin/promotions/<int:pid>/approve", methods=["POST"])
@@ -2019,13 +1943,11 @@ def approve_promotion(pid):
     db = get_db()
     promo = db.execute("SELECT * FROM promotions WHERE id=?", (pid,)).fetchone()
     if not promo:
-        db.close(); return jsonify({"error": "Not found"}), 404
     db.execute("UPDATE promotions SET status='approved', channel_granted=1, "
                "reviewed_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
     # Grant extra channel slot by upgrading plan (simplified: just mark as done)
     user = db.execute("SELECT email, full_name FROM users WHERE id=?",
                       (promo["user_id"],)).fetchone()
-    db.commit(); db.close()
     if user:
         send_email(user["email"], user["full_name"],
                    "🎉 Free channel approved!",
@@ -2041,7 +1963,6 @@ def reject_promotion(pid):
     db = get_db()
     db.execute("UPDATE promotions SET status='rejected', reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
                (pid,))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 # ── Admin system settings ─────────────────────────────────────────────────────
@@ -2050,7 +1971,6 @@ def reject_promotion(pid):
 def admin_get_settings():
     db   = get_db()
     rows = db.execute("SELECT key, value FROM system_settings").fetchall()
-    db.close()
     return jsonify({r["key"]: r["value"] for r in rows})
 
 @app.route("/api/admin/settings", methods=["POST"])
@@ -2064,7 +1984,6 @@ def admin_save_settings():
             db.execute("UPDATE system_settings SET value=? WHERE key=?", (str(v), k))
         else:
             db.execute("INSERT INTO system_settings (key, value) VALUES (?,?)", (k, str(v)))
-    db.commit(); db.close()
     return jsonify({"success": True})
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -2133,7 +2052,6 @@ def _email_sequence_worker():
                     db.execute("UPDATE email_sequences SET sent=1, sent_at=CURRENT_TIMESTAMP WHERE id=?",
                                (seq["id"],))
                     db.commit()
-            db.close()
         except Exception as e:
             print(f"[EMAIL SEQ] Error: {e}")
         time.sleep(3600)  # Check every hour
@@ -2149,7 +2067,6 @@ def _trial_expiry_worker():
                 "AND plan IN ('pro','agency')",
                 (now,)
             )
-            db.commit(); db.close()
         except Exception as e:
             print(f"[TRIAL EXPIRY] Error: {e}")
         time.sleep(3600)
