@@ -1,6 +1,5 @@
 """
 FinanceFlow SaaS — Complete Flask App
-Matches worker.py SQLite schema. All routes wired.
 """
 
 from flask import Flask, request, jsonify, render_template, redirect, session
@@ -203,11 +202,11 @@ def register():
         user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
         token = make_token(user["id"])
         session["token"] = token
-        send_email(email, full_name, "Welcome to FinanceFlow! 🚀", f"""
+        send_email(email, full_name, "Welcome to FinanceFlow!", f"""
             <div style="font-family:sans-serif;max-width:600px;margin:auto">
-            <h2 style="color:#4F46E5">Welcome to FinanceFlow, {full_name or 'Creator'}!</h2>
-            <p>Your account is ready. Connect your YouTube channel and we'll handle everything.</p>
-            <a href="{APP_URL}/dashboard" style="display:inline-block;background:#4F46E5;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+            <h2 style="color:#4F46E5">Welcome to FinanceFlow!</h2>
+            <p>Your account is ready. Connect your YouTube channel and we handle everything.</p>
+            <a href="{APP_URL}/dashboard" style="display:inline-block;background:#4F46E5;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold">
                 Go to Dashboard →
             </a>
             </div>""")
@@ -254,7 +253,7 @@ def forgot_password():
             <div style="font-family:sans-serif;max-width:600px;margin:auto">
             <h2 style="color:#4F46E5">Password Reset</h2>
             <p>Click below to reset your password. Expires in 1 hour.</p>
-            <a href="{link}" style="display:inline-block;background:#4F46E5;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+            <a href="{link}" style="display:inline-block;background:#4F46E5;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold">
                 Reset Password →
             </a>
             </div>""")
