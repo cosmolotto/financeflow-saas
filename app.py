@@ -665,8 +665,17 @@ def channel_callback():
         )
         with urllib.request.urlopen(req) as r:
             tokens = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        print(f"[OAUTH] Token exchange HTTP error: {e.code} {e.reason}")
+        print(f"[OAUTH] Google response body: {error_body}")
+        print(f"[OAUTH] redirect_uri used: {REDIRECT_URI}")
+        print(f"[OAUTH] client_id used: {CLIENT_ID}")
+        return redirect("/dashboard?error=token_exchange_failed")
     except Exception as e:
         print(f"[OAUTH] Token exchange failed: {e}")
+        print(f"[OAUTH] redirect_uri used: {REDIRECT_URI}")
+        print(f"[OAUTH] client_id used: {CLIENT_ID}")
         return redirect("/dashboard?error=token_exchange_failed")
     access_token  = tokens.get("access_token", "")
     refresh_token = tokens.get("refresh_token", "")
