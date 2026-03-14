@@ -182,6 +182,16 @@ select.ps:focus{border-color:var(--g)}
 
 <!-- ══ USERS ══ -->
 <div id="page-users" class="page">
+  <!-- Create New Admin -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="ch"><div class="cht">➕ Create New Admin Account</div></div>
+    <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end">
+      <div class="fd" style="margin:0"><label>Email</label><input type="text" id="na-email" placeholder="admin@example.com"></div>
+      <div class="fd" style="margin:0"><label>Full Name</label><input type="text" id="na-name" placeholder="Admin Name"></div>
+      <div class="fd" style="margin:0"><label>Password</label><input type="password" id="na-pass" placeholder="Min 6 characters"></div>
+      <button class="btn bg" onclick="createAdmin()">Create Admin</button>
+    </div>
+  </div>
   <div class="srch">
     <input type="text" id="user-search" placeholder="🔍 Search by email..." oninput="filterUsers()">
     <div style="font-size:12px;color:var(--mt)">{{ stats.total_users }} total users</div>
@@ -220,7 +230,7 @@ select.ps:focus{border-color:var(--g)}
   <div class="card">
     <div class="ch"><div class="cht">📺 All Channels ({{ channels|length }})</div></div>
     <table>
-      <thead><tr><th>Channel</th><th>Owner</th><th>Niche</th><th>Videos</th><th>Schedule</th><th>Connected</th></tr></thead>
+      <thead><tr><th>Channel</th><th>Owner</th><th>Niche</th><th>Videos</th><th>Subs</th><th>Autopilot</th><th>Monetized</th><th>Connected</th></tr></thead>
       <tbody>
       {% for ch in channels %}
       <tr>
@@ -228,11 +238,17 @@ select.ps:focus{border-color:var(--g)}
         <td style="color:var(--mt);font-size:11px">{{ ch.email }}</td>
         <td><span style="background:rgba(255,255,255,0.04);border:1px solid var(--bd);padding:2px 7px;border-radius:5px;font-size:10px;color:var(--mt)">{{ (ch.niche or '').replace('_',' ').title() }}</span></td>
         <td style="color:var(--g);font-weight:700">{{ ch.videos_uploaded }}</td>
-        <td style="color:var(--mt);font-size:11px">{{ ch.upload_schedule or '—' }}</td>
+        <td style="color:var(--mt);font-size:11px">{{ ch.subscriber_count or 0 }}</td>
+        <td>
+          <label class="tgl"><input type="checkbox" {% if ch.autopilot %}checked{% endif %} onchange="adminToggleAutopilot({{ ch.id }},this.checked)"><span class="tgl-track"><span class="tgl-thumb"></span></span></label>
+        </td>
+        <td>
+          <label class="tgl"><input type="checkbox" {% if ch.monetized %}checked{% endif %} onchange="adminMarkMonetized({{ ch.id }},this.checked)"><span class="tgl-track"><span class="tgl-thumb"></span></span></label>
+        </td>
         <td style="color:var(--mt);font-size:11px">{{ (ch.created_at or '')[:10] }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="6"><div class="em"><div class="em-i">📺</div>No channels connected</div></td></tr>
+      <tr><td colspan="8"><div class="em"><div class="em-i">📺</div>No channels connected</div></td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -470,6 +486,27 @@ async function rejectPayment(pid){
   const d=await r.json();
   if(d.status||d.success||d.message){toast('Payment rejected','inf');loadPayments();}
   else toast(d.error||'Reject failed','er');
+}
+
+async function createAdmin(){
+  const email=v('na-email'),name=v('na-name'),password=v('na-pass');
+  if(!email||!password){toast('Email and password required','er');return;}
+  const r=await fetch('/api/admin/create-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,name,password})});
+  const d=await r.json();
+  if(d.success){toast('✅ Admin '+email+' created');document.getElementById('na-email').value='';document.getElementById('na-name').value='';document.getElementById('na-pass').value='';setTimeout(()=>location.reload(),900);}
+  else toast(d.error||'Create failed','er');
+}
+async function adminToggleAutopilot(cid,enabled){
+  const r=await fetch('/api/admin/channels/'+cid+'/autopilot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});
+  const d=await r.json();
+  if(!d.success)toast(d.error||'Failed','er');
+  else toast('Autopilot '+(enabled?'on':'off'));
+}
+async function adminMarkMonetized(cid,monetized){
+  const r=await fetch('/api/admin/channels/'+cid+'/monetized',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({monetized})});
+  const d=await r.json();
+  if(!d.success)toast(d.error||'Failed','er');
+  else toast(monetized?'Marked monetized ✅':'Marked not monetized');
 }
 
 // Auto-refresh stats

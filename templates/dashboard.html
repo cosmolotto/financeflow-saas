@@ -157,6 +157,17 @@ tr:hover td{background:rgba(255,255,255,0.01)}
 .ts.inf{border-color:rgba(59,130,246,0.4);color:var(--blue)}
 .spin{animation:spin 1s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Toggle switch */
+.tgl{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--muted)}
+.tgl input{display:none}
+.tgl-track{width:34px;height:18px;background:var(--border);border-radius:100px;position:relative;transition:background 0.2s;flex-shrink:0}
+.tgl input:checked~.tgl-track{background:var(--gold)}
+.tgl-thumb{position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.4)}
+.tgl input:checked~.tgl-track .tgl-thumb{left:18px}
+/* Monetization progress */
+.mon-bar{height:5px;background:var(--border);border-radius:100px;overflow:hidden;margin-top:4px}
+.mon-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:100px;transition:width 0.4s}
+.mon-row{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px}
 </style>
 </head>
 <body>
@@ -215,8 +226,22 @@ tr:hover td{background:rgba(255,255,255,0.01)}
       <div class="cg">
         {% for ch in channels %}
         <div class="cc">
-          <div class="ct"><div class="ci">📺</div><div><div class="cn">{{ ch.channel_name }}</div><div class="cs">🟢 {{ ch.niche.replace('_',' ').title() }}</div></div></div>
+          <div class="ct">
+            <div class="ci">{% if ch.profile_picture_url %}<img src="{{ ch.profile_picture_url }}" style="width:40px;height:40px;border-radius:9px;object-fit:cover">{% else %}📺{% endif %}</div>
+            <div><div class="cn">{{ ch.channel_name }}</div><div class="cs">{{ ch.niche.replace('_',' ').title() }}{% if ch.monetized %} <span style="color:var(--gold);font-size:10px">💰 Monetized</span>{% endif %}</div></div>
+          </div>
           <div class="cm"><span class="tg">{{ ch.voice_style.title() }}</span><span class="tg">{{ ch.upload_schedule.replace('_',' ') }}</span><span class="tg">{{ ch.videos_uploaded }} uploads</span></div>
+          {% if not ch.monetized %}
+          <div style="margin-bottom:10px;font-size:11px">
+            <div style="display:flex;justify-content:space-between;color:var(--muted);margin-bottom:2px"><span>Subscribers</span><span style="color:var(--text)">{{ ch.subscriber_count }}/1,000</span></div>
+            <div class="mon-bar"><div class="mon-fill" style="width:{{ [ch.subscriber_count/10,100]|min }}%"></div></div>
+            <div style="display:flex;justify-content:space-between;color:var(--muted);margin-top:5px;margin-bottom:2px"><span>Watch Hours</span><span style="color:var(--text)">{{ ch.watch_hours|int }}/4,000</span></div>
+            <div class="mon-bar"><div class="mon-fill" style="width:{{ [ch.watch_hours/40,100]|min }}%"></div></div>
+          </div>
+          {% endif %}
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <label class="tgl"><input type="checkbox" {% if ch.autopilot %}checked{% endif %} onchange="toggleAutopilot({{ ch.id }},this.checked)"><span class="tgl-track"><span class="tgl-thumb"></span></span>Autopilot</label>
+          </div>
           <div class="ca">
             <button class="btn bg sm" onclick="openGen({{ ch.id }},'{{ ch.channel_name }}')">⚡ Generate</button>
             <button class="btn bo sm" onclick="openCS({{ ch.id }},'{{ ch.niche }}','{{ ch.voice_style }}','{{ ch.upload_schedule }}')">⚙️</button>
@@ -272,8 +297,22 @@ tr:hover td{background:rgba(255,255,255,0.01)}
       <div class="cg">
         {% for ch in channels %}
         <div class="cc">
-          <div class="ct"><div class="ci">📺</div><div><div class="cn">{{ ch.channel_name }}</div><div class="cs">{{ ch.channel_id or 'ID pending' }}</div></div></div>
+          <div class="ct">
+            <div class="ci">{% if ch.profile_picture_url %}<img src="{{ ch.profile_picture_url }}" style="width:40px;height:40px;border-radius:9px;object-fit:cover">{% else %}📺{% endif %}</div>
+            <div><div class="cn">{{ ch.channel_name }}</div><div class="cs">{{ ch.channel_id or 'ID pending' }}{% if ch.monetized %} <span style="color:var(--gold);font-size:10px">💰</span>{% endif %}</div></div>
+          </div>
           <div class="cm"><span class="tg">{{ ch.niche.replace('_',' ').title() }}</span><span class="tg">{{ ch.voice_style.title() }}</span><span class="tg">{{ ch.upload_schedule }}</span></div>
+          {% if not ch.monetized %}
+          <div style="margin-bottom:10px;font-size:11px">
+            <div style="display:flex;justify-content:space-between;color:var(--muted);margin-bottom:2px"><span>Subscribers</span><span>{{ ch.subscriber_count }}/1,000</span></div>
+            <div class="mon-bar"><div class="mon-fill" style="width:{{ [ch.subscriber_count/10,100]|min }}%"></div></div>
+            <div style="display:flex;justify-content:space-between;color:var(--muted);margin-top:5px;margin-bottom:2px"><span>Watch Hours</span><span>{{ ch.watch_hours|int }}/4,000</span></div>
+            <div class="mon-bar"><div class="mon-fill" style="width:{{ [ch.watch_hours/40,100]|min }}%"></div></div>
+          </div>
+          {% endif %}
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <label class="tgl"><input type="checkbox" {% if ch.autopilot %}checked{% endif %} onchange="toggleAutopilot({{ ch.id }},this.checked)"><span class="tgl-track"><span class="tgl-thumb"></span></span>Autopilot</label>
+          </div>
           <div class="ca">
             <button class="btn bg sm" onclick="openGen({{ ch.id }},'{{ ch.channel_name }}')">⚡ Generate</button>
             <button class="btn bo sm" onclick="openCS({{ ch.id }},'{{ ch.niche }}','{{ ch.voice_style }}','{{ ch.upload_schedule }}')">⚙️ Settings</button>
@@ -450,6 +489,17 @@ tr:hover td{background:rgba(255,255,255,0.01)}
           <button class="btn {% if user.plan=='agency' and not is_admin %}bo{% else %}bg{% endif %}" style="width:100%;justify-content:center" onclick="upgrade('agency')">{% if user.plan=='agency' and not is_admin %}Current Plan{% else %}Get Agency{% endif %}</button>
         </div>
       </div>
+      <!-- Growth Plan -->
+      <div style="margin-top:18px;background:linear-gradient(135deg,rgba(255,215,0,0.05),rgba(255,140,0,0.05));border:1px solid rgba(255,215,0,0.25);border-radius:13px;padding:22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:3px">🚀 Until Monetized Plan <span style="background:rgba(255,215,0,0.2);color:var(--gold);font-size:11px;padding:2px 9px;border-radius:100px">NEW</span></div>
+          <div style="color:var(--muted);font-size:13px">Pay once ($49/mo) until your channel hits 1,000 subs + 4,000 watch hours. Then stays active. Unlimited videos, custom prompts, social posting, autopilot.</div>
+        </div>
+        <div style="text-align:center;flex-shrink:0">
+          <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--gold)">$49<span style="font-size:14px;color:var(--muted)">/mo</span></div>
+          <button class="btn bg" onclick="upgrade('growth')" style="margin-top:8px;padding:10px 22px">Get Growth Plan →</button>
+        </div>
+      </div>
 
       <!-- Payment History -->
       <div style="margin-top:28px">
@@ -476,6 +526,28 @@ tr:hover td{background:rgba(255,255,255,0.01)}
           <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Run in Terminal 2 for videos to generate.</p>
           <div style="font-family:monospace;font-size:12px;background:var(--dark);padding:10px;border-radius:8px;border:1px solid var(--border);color:var(--gold);line-height:1.8">cd ~/Downloads/saas<br>python3 worker.py</div>
           <p style="font-size:12px;color:var(--muted);margin-top:10px">Port conflict? <span style="color:var(--gold);font-family:monospace">lsof -ti:5000 | xargs kill</span></p>
+        </div>
+      </div>
+      <!-- My Brand section -->
+      <div style="margin-top:20px">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:14px">🎨 My Brand</div>
+        <div class="sg2">
+          <div class="sk"><h4>Brand Colors</h4>
+            <div class="fd"><label>Primary Color</label><input type="color" id="br-primary" value="#FFD700" style="width:100%;height:38px;padding:2px;cursor:pointer"></div>
+            <div class="fd"><label>Accent Color</label><input type="color" id="br-accent" value="#FFA500" style="width:100%;height:38px;padding:2px;cursor:pointer"></div>
+            <button class="btn bg sm" onclick="saveBranding()">Save Colors</button>
+          </div>
+          <div class="sk"><h4>Avatar & Logo</h4>
+            <div class="fd"><label>Channel Avatar</label><input type="file" id="av-file" accept="image/*" style="font-size:12px"><button class="btn bg sm" style="margin-top:7px" onclick="uploadFile('avatar','av-file')">Upload Avatar</button></div>
+            <div class="fd" style="margin-top:12px"><label>Brand Logo</label><input type="file" id="lg-file" accept="image/*" style="font-size:12px"><button class="btn bg sm" style="margin-top:7px" onclick="uploadFile('logo','lg-file')">Upload Logo</button></div>
+          </div>
+          <div class="sk"><h4>🎙️ Voice Clone</h4>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Upload a 30-60s audio sample to clone your voice for all future videos via ElevenLabs.</p>
+            <div class="fd"><label>Voice Sample (MP3/WAV)</label><input type="file" id="vc-file" accept="audio/*" style="font-size:12px"></div>
+            <div class="fd"><label>Voice Name</label><input type="text" id="vc-name" placeholder="e.g. My Channel Voice"></div>
+            <button class="btn bg sm" onclick="cloneVoice()">Clone Voice</button>
+            <div id="vc-msg" style="margin-top:8px;font-size:12px;display:none"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -572,9 +644,10 @@ tr:hover td{background:rgba(255,255,255,0.01)}
   <div class="mo"><button class="mc" onclick="cAll()">✕</button><h3>💳 Upgrade Plan</h3><div class="mo-s">Submit payment details to activate <strong id="pay-plan-label"></strong> plan</div>
     <input type="hidden" id="pay-plan">
     <div class="fd"><label>Select Plan</label>
-      <select id="pay-plan-select" onchange="document.getElementById('pay-plan').value=this.value;document.getElementById('pay-plan-label').textContent=this.value==='pro'?'Pro ($29/mo)':'Agency ($99/mo)'">
+      <select id="pay-plan-select" onchange="document.getElementById('pay-plan').value=this.value;document.getElementById('pay-plan-label').textContent={'pro':'Pro ($29/mo)','agency':'Agency ($99/mo)','growth':'Growth Until Monetized ($49/mo)'}[this.value]||this.value">
         <option value="pro">Pro — $29/mo (3 channels, 14 videos/week, social posting)</option>
         <option value="agency">Agency — $99/mo (10 channels, unlimited videos, API access)</option>
+        <option value="growth">Growth — $49/mo (until monetized, autopilot, unlimited)</option>
       </select>
     </div>
     <div class="fd"><label>Payment Method</label>
@@ -623,7 +696,7 @@ async function saveCS(){
   const r=await fetch('/api/channels/'+id+'/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({niche:document.getElementById('cs-n').value,voice_style:document.getElementById('cs-v').value,upload_schedule:document.getElementById('cs-s').value})});
   const d=await r.json();cAll();if(d.success){toast('Settings saved ✅');setTimeout(()=>location.reload(),900);}else toast(d.error,'er');
 }
-async function delCh(id){if(!confirm('Remove this channel?'))return;const r=await fetch('/api/channels/'+id,{method:'DELETE'});const d=await r.json();if(d.success){toast('Channel removed');setTimeout(()=>location.reload(),700);}}
+async function delCh(id){if(!confirm('Remove this channel?'))return;const r=await fetch('/api/channels/'+id,{method:'DELETE'});const d=await r.json();if(d.success||d.status){toast('Channel removed');setTimeout(()=>location.reload(),700);}}
 
 // SOCIAL MEDIA
 async function openSocial(chId, chName){
@@ -733,11 +806,40 @@ async function loadBillingHistory(){
 }
 function upgrade(plan){
   if(plan==='starter'){toast('You are already on or downgrading to the free plan — contact support','inf');return;}
+  const labels={pro:'Pro ($29/mo)',agency:'Agency ($99/mo)',growth:'Growth Until Monetized ($49/mo)'};
   document.getElementById('pay-plan').value=plan;
   document.getElementById('pay-plan-select').value=plan;
   document.getElementById('pay-ref').value='';
-  document.getElementById('pay-plan-label').textContent=plan==='pro'?'Pro ($29/mo)':'Agency ($99/mo)';
+  document.getElementById('pay-plan-label').textContent=labels[plan]||plan;
   openModal('pm-payment');
+}
+async function toggleAutopilot(cid,enabled){
+  const r=await fetch('/api/channels/'+cid+'/autopilot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});
+  const d=await r.json();
+  if(d.success)toast('Autopilot '+(enabled?'enabled':'disabled'),'ok');else toast(d.error||'Failed','er');
+}
+async function saveBranding(){
+  const primary=document.getElementById('br-primary').value;
+  const accent=document.getElementById('br-accent').value;
+  const r=await fetch('/api/account/branding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand_color_primary:primary,brand_color_accent:accent})});
+  const d=await r.json();if(d.success)toast('Brand colors saved ✅');else toast(d.error,'er');
+}
+async function uploadFile(ftype,inputId){
+  const inp=document.getElementById(inputId);if(!inp||!inp.files[0]){toast('Choose a file first','er');return;}
+  const fd=new FormData();fd.append('file',inp.files[0]);
+  const r=await fetch('/api/account/upload-'+ftype,{method:'POST',body:fd});
+  const d=await r.json();if(d.success)toast(ftype.charAt(0).toUpperCase()+ftype.slice(1)+' uploaded ✅');else toast(d.error,'er');
+}
+async function cloneVoice(){
+  const inp=document.getElementById('vc-file');const name=document.getElementById('vc-name').value||'My Voice';
+  const msg=document.getElementById('vc-msg');
+  if(!inp||!inp.files[0]){toast('Choose an audio file first','er');return;}
+  msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Cloning voice... (may take 30s)';
+  const fd=new FormData();fd.append('audio',inp.files[0]);fd.append('name',name);
+  const r=await fetch('/api/account/clone-voice',{method:'POST',body:fd});
+  const d=await r.json();
+  if(d.success){msg.style.color='var(--green)';msg.textContent='Voice cloned! ID: '+d.voice_id;toast('Voice cloned ✅');}
+  else{msg.style.color='var(--red)';msg.textContent=d.error;toast(d.error,'er');}
 }
 async function submitPayment(){
   const plan=document.getElementById('pay-plan').value;

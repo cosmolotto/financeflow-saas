@@ -14,8 +14,10 @@ OUT   = Path("generated_videos")
 HBEAT = "worker_heartbeat.txt"
 OUT.mkdir(exist_ok=True)
 
-CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
-CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+CLIENT_ID       = os.environ.get("GOOGLE_CLIENT_ID", "")
+CLIENT_SECRET   = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+ELEVENLABS_KEY  = os.environ.get("ELEVENLABS_API_KEY", "")
+OPENAI_KEY      = os.environ.get("OPENAI_API_KEY", "")
 
 def find_ffmpeg():
     for p in [os.path.expanduser("~/Downloads/ffmpeg"),"/opt/homebrew/bin/ffmpeg","/usr/local/bin/ffmpeg","/usr/bin/ffmpeg"]:
@@ -64,13 +66,46 @@ def refresh_yt_token(rt):
     with urllib.request.urlopen(urllib.request.Request("https://oauth2.googleapis.com/token",data=data,headers={"Content-Type":"application/x-www-form-urlencoded"})) as r:
         return json.loads(r.read())["access_token"]
 
-def make_voice(text,out_wav,rate=165):
-    aiff=out_wav.replace(".wav",".aiff")
-    for voice in ["Daniel","Samantha","Alex","Karen","Tom"]:
-        res=subprocess.run(["say","-v",voice,"-r",str(rate),"-o",aiff,"--",text],capture_output=True)
-        if res.returncode==0 and os.path.exists(aiff): break
-    subprocess.run(["afconvert","-f","WAVE","-d","LEI16@44100",aiff,out_wav],capture_output=True)
-    if os.path.exists(aiff): os.remove(aiff)
+def make_voice(text, out_wav, voice_id=None, rate=165):
+    # Try ElevenLabs first if key is available
+    if ELEVENLABS_KEY:
+        try:
+            vid = voice_id or "pNInz6obpgDQGcFmaJgB"  # Adam voice
+            payload = json.dumps({
+                "text": text,
+                "model_id": "eleven_monolingual_v1",
+                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
+            }).encode()
+            req = urllib.request.Request(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{vid}",
+                data=payload,
+                headers={"xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json",
+                         "Accept": "audio/mpeg"}
+            )
+            with urllib.request.urlopen(req) as r:
+                mp3_data = r.read()
+            mp3_path = out_wav.replace(".wav", ".mp3")
+            with open(mp3_path, "wb") as f:
+                f.write(mp3_data)
+            if FFMPEG and os.path.exists(mp3_path):
+                subprocess.run([FFMPEG, "-y", "-i", mp3_path, out_wav], capture_output=True)
+                os.remove(mp3_path)
+            if os.path.exists(out_wav):
+                print("   ElevenLabs voice OK")
+                return True
+        except Exception as e:
+            print(f"   ElevenLabs failed ({e}), falling back to Mac say...")
+    # Fallback: Mac say command
+    aiff = out_wav.replace(".wav", ".aiff")
+    for voice in ["Daniel", "Samantha", "Alex", "Karen", "Tom"]:
+        res = subprocess.run(["say", "-v", voice, "-r", str(rate), "-o", aiff, "--", text],
+                             capture_output=True)
+        if res.returncode == 0 and os.path.exists(aiff):
+            break
+    subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@44100", aiff, out_wav],
+                   capture_output=True)
+    if os.path.exists(aiff):
+        os.remove(aiff)
     return os.path.exists(out_wav)
 
 def get_duration(wav):
@@ -282,7 +317,9 @@ def process(job):
         wd=OUT/f"job_{jid}"; wd.mkdir(exist_ok=True)
         prog("Generating voice narration...")
         wav=str(wd/"voice.wav")
-        if not make_voice(sd["script"],wav): raise Exception("Voice failed — is Mac 'say' command available?")
+        user_row=db.execute("SELECT custom_voice_id FROM users WHERE id=?",(uid,)).fetchone()
+        voice_id=user_row["custom_voice_id"] if user_row and user_row["custom_voice_id"] else None
+        if not make_voice(sd["script"],wav,voice_id=voice_id): raise Exception("Voice failed — is Mac 'say' command available or ElevenLabs configured?")
         dur=get_duration(wav); print(f"   Duration: {dur:.1f}s")
 
         prog("Generating background music...")
@@ -323,6 +360,44 @@ def process(job):
     except Exception as e:
         done_fail(e)
 
+def check_autopilot():
+    """Queue one video per channel that has autopilot=1 and no job in the last 24h."""
+    db = get_db()
+    try:
+        channels = db.execute(
+            "SELECT * FROM channels WHERE autopilot=1 AND active=1"
+        ).fetchall()
+        queued = 0
+        for ch in channels:
+            last_job = db.execute(
+                "SELECT created_at FROM queue WHERE channel_id=? "
+                "ORDER BY created_at DESC LIMIT 1", (ch["id"],)
+            ).fetchone()
+            if last_job:
+                import datetime
+                try:
+                    last_dt = datetime.datetime.fromisoformat(last_job["created_at"])
+                    age_h = (datetime.datetime.utcnow() - last_dt).total_seconds() / 3600
+                    if age_h < 24:
+                        continue
+                except Exception:
+                    pass
+            # Auto-queue a video for this channel
+            niche = ch["niche"] or "personal_finance"
+            db.execute(
+                "INSERT INTO queue (user_id, channel_id, video_type, niche, mode) VALUES (?,?,?,?,'auto')",
+                (ch["user_id"], ch["id"], ch.get("video_type", "short"), niche)
+            )
+            db.commit()
+            queued += 1
+            print(f"   [AUTOPILOT] Queued video for channel {ch['channel_name']} (id={ch['id']})")
+        return queued
+    except Exception as e:
+        print(f"   [AUTOPILOT] Error: {e}")
+        return 0
+    finally:
+        db.close()
+
 if __name__=="__main__":
     print("\n==============================================")
     print("  FinanceFlow Worker — Launch Version")
@@ -334,14 +409,23 @@ if __name__=="__main__":
     try: from PIL import Image; print("Pillow: ready")
     except: print("ERROR: pip3 install Pillow --break-system-packages"); sys.exit(1)
     print(f"DB: {DB} | Output: {OUT}\n")
+    idle_count = 0
     while True:
         try:
             with open(HBEAT,"w") as f: f.write(str(time.time()))
             db=get_db()
             job=db.execute("SELECT * FROM queue WHERE status='pending' ORDER BY created_at ASC LIMIT 1").fetchone()
             db.close()
-            if job: process(job)
-            else: print(f"[{time.strftime('%H:%M:%S')}] Watching queue...",end='\r',flush=True)
+            if job:
+                idle_count = 0
+                process(job)
+            else:
+                idle_count += 1
+                print(f"[{time.strftime('%H:%M:%S')}] Watching queue...",end='\r',flush=True)
+                # Check autopilot every 6 idle cycles (~60s)
+                if idle_count % 6 == 0:
+                    n = check_autopilot()
+                    if n: print(f"\n[AUTOPILOT] {n} job(s) queued")
         except KeyboardInterrupt:
             print("\nWorker stopped."); break
         except Exception as e:

@@ -3,7 +3,7 @@ FinanceFlow SaaS — Complete Flask App
 Features: JWT auth, multi-provider payments, OpenAI scripts, Redis/Celery queue
 """
 
-from flask import Flask, request, jsonify, render_template, redirect, session
+from flask import Flask, request, jsonify, render_template, redirect, session, send_from_directory
 import sqlite3, os, json, hashlib, secrets, urllib.parse, urllib.request, time, random
 from functools import wraps
 
@@ -50,11 +50,13 @@ STRIPE_KEY       = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WH_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 OPENAI_KEY       = os.environ.get("OPENAI_API_KEY", "")
 REDIS_URL        = os.environ.get("REDIS_URL", "")
+ELEVENLABS_KEY   = os.environ.get("ELEVENLABS_API_KEY", "")
 
 PLANS = {
-    "starter": {"name": "Starter", "channels": 1,  "videos_per_week": 3,   "price": 0,  "custom_prompts": False, "social_posting": False},
-    "pro":     {"name": "Pro",     "channels": 3,  "videos_per_week": 14,  "price": 29, "custom_prompts": True,  "social_posting": True},
-    "agency":  {"name": "Agency",  "channels": 10, "videos_per_week": 999, "price": 99, "custom_prompts": True,  "social_posting": True},
+    "starter": {"name": "Starter",        "channels": 1,  "videos_per_week": 3,   "price": 0,  "custom_prompts": False, "social_posting": False, "autopilot": False},
+    "pro":     {"name": "Pro",             "channels": 3,  "videos_per_week": 14,  "price": 29, "custom_prompts": True,  "social_posting": True,  "autopilot": False},
+    "agency":  {"name": "Agency",          "channels": 10, "videos_per_week": 999, "price": 99, "custom_prompts": True,  "social_posting": True,  "autopilot": True},
+    "growth":  {"name": "Until Monetized", "channels": 1,  "videos_per_week": 999, "price": 49, "custom_prompts": True,  "social_posting": True,  "autopilot": True},
 }
 
 # ── Stripe setup ──────────────────────────────────────────────────────────────
@@ -166,6 +168,43 @@ def init_db():
     """)
     db.commit()
     db.close()
+    migrate_db()
+
+def migrate_db():
+    """Add new columns to existing tables without breaking existing data."""
+    db = get_db()
+    for sql in [
+        "ALTER TABLE channels ADD COLUMN autopilot INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN monetized INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN subscriber_count INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN view_count INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN watch_hours REAL DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN video_count INTEGER DEFAULT 0",
+        "ALTER TABLE channels ADD COLUMN profile_picture_url TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN custom_voice_id TEXT",
+        "ALTER TABLE users ADD COLUMN avatar_path TEXT",
+        "ALTER TABLE users ADD COLUMN logo_path TEXT",
+        "ALTER TABLE users ADD COLUMN brand_color_primary TEXT DEFAULT '#FFD700'",
+        "ALTER TABLE users ADD COLUMN brand_color_accent TEXT DEFAULT '#FFA500'",
+        "ALTER TABLE queue ADD COLUMN mode TEXT DEFAULT 'manual'",
+        "ALTER TABLE payments ADD COLUMN payment_method TEXT",
+    ]:
+        try:
+            db.execute(sql)
+        except Exception:
+            pass
+    db.commit()
+    db.close()
+
+def worker_online_status():
+    HBEAT = "worker_heartbeat.txt"
+    try:
+        if os.path.exists(HBEAT):
+            age = time.time() - float(open(HBEAT).read().strip())
+            return age < 30
+    except Exception:
+        pass
+    return False
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 def hash_pw(pw):
@@ -386,7 +425,12 @@ def dashboard():
 
     channels = [dict(r) for r in db.execute(
         "SELECT id, channel_name, youtube_channel_id AS channel_id, niche, "
-        "video_type AS voice_style, schedule AS upload_schedule, videos_uploaded "
+        "video_type AS voice_style, schedule AS upload_schedule, videos_uploaded, "
+        "COALESCE(autopilot,0) AS autopilot, COALESCE(monetized,0) AS monetized, "
+        "COALESCE(subscriber_count,0) AS subscriber_count, "
+        "COALESCE(view_count,0) AS view_count, "
+        "COALESCE(watch_hours,0.0) AS watch_hours, "
+        "COALESCE(profile_picture_url,'') AS profile_picture_url "
         "FROM channels WHERE user_id=? AND active=1 ORDER BY created_at DESC",
         (u["id"],)
     ).fetchall()]
@@ -429,7 +473,7 @@ def dashboard():
         plan=plan_data, is_admin=is_admin, plans=PLANS,
         user=user_obj, channels=channels, queue=queue,
         videos=videos, social=social, stats=stats,
-        prompts=[], worker_online=bool(celery_app),
+        prompts=[], worker_online=worker_online_status(),
         error=request.args.get("error", ""), success=success,
     )
 
@@ -454,7 +498,7 @@ def admin_page():
         "pro_users":      pro_users,
         "agency_users":   agency_users,
         "mrr":            mrr,
-        "worker_online":  bool(celery_app),
+        "worker_online":  worker_online_status(),
     }
     raw_users = db.execute(
         "SELECT id, email, full_name, plan, is_admin, created_at FROM users ORDER BY created_at DESC"
@@ -467,7 +511,9 @@ def admin_page():
         users_list.append(ud)
     raw_chans = db.execute(
         "SELECT c.id, c.channel_name, c.youtube_channel_id, c.niche, c.video_type, "
-        "c.schedule, c.videos_uploaded, c.created_at, u.email "
+        "c.schedule, c.videos_uploaded, c.created_at, u.email, "
+        "COALESCE(c.autopilot,0) AS autopilot, COALESCE(c.monetized,0) AS monetized, "
+        "COALESCE(c.subscriber_count,0) AS subscriber_count "
         "FROM channels c LEFT JOIN users u ON c.user_id=u.id "
         "WHERE c.active=1 ORDER BY c.created_at DESC"
     ).fetchall()
@@ -868,7 +914,8 @@ def payment_request():
     """User requests a plan upgrade — creates pending payment record."""
     d        = request.get_json() or {}
     plan     = d.get("plan", "")
-    provider = d.get("provider", "manual")  # manual | stripe | jazzcash | easypaisa | razorpay
+    provider = d.get("provider") or d.get("payment_method", "manual")
+    reference = d.get("reference", "")
     if plan not in PLANS or PLANS[plan]["price"] == 0:
         return jsonify({"error": "Invalid plan or plan is free"}), 400
     amount = PLANS[plan]["price"]
@@ -876,13 +923,20 @@ def payment_request():
     db.execute("UPDATE payments SET status='cancelled' WHERE user_id=? AND status='pending'",
                (request.uid,))
     payment_id = db.execute(
-        "INSERT INTO payments (user_id, amount, plan, provider, status) VALUES (?,?,?,?,'pending')",
-        (request.uid, amount, plan, provider)
+        "INSERT INTO payments (user_id, amount, plan, provider, payment_method, reference, status) VALUES (?,?,?,?,?,?,'pending')",
+        (request.uid, amount, plan, provider, provider, reference)
     ).lastrowid
     db.commit(); db.close()
+    if reference:
+        db2 = get_db()
+        db2.execute("UPDATE payments SET status='submitted', reference=? WHERE id=?", (reference, payment_id))
+        db2.commit(); db2.close()
     resp = {
+        "success": True,
         "payment_id": payment_id, "plan": plan,
-        "amount": amount, "provider": provider, "status": "pending",
+        "amount": amount, "provider": provider,
+        "status": "submitted" if reference else "pending",
+        "message": "Payment request submitted. Admin will review within 24h." if reference else "Payment created.",
     }
     if provider == "stripe" and HAS_STRIPE and STRIPE_KEY:
         resp["instructions"] = "Use /api/payments/stripe-checkout to get a Stripe checkout URL"
@@ -960,7 +1014,7 @@ def payment_status():
         (request.uid,)
     ).fetchall()
     db.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify({"payments": [dict(r) for r in rows]})
 
 @app.route("/api/payments/stripe-checkout", methods=["POST"])
 @login_required
@@ -1140,6 +1194,7 @@ def admin_stats():
     total_chans   = db.execute("SELECT COUNT(*) FROM channels WHERE active=1").fetchone()[0]
     pro           = db.execute("SELECT COUNT(*) FROM users WHERE plan='pro'").fetchone()[0]
     agency        = db.execute("SELECT COUNT(*) FROM users WHERE plan='agency'").fetchone()[0]
+    growth        = db.execute("SELECT COUNT(*) FROM users WHERE plan='growth'").fetchone()[0]
     queue_pending = db.execute("SELECT COUNT(*) FROM queue WHERE status IN ('pending','processing')").fetchone()[0]
     pending_pays  = db.execute("SELECT COUNT(*) FROM payments WHERE status IN ('pending','submitted')").fetchone()[0]
     db.close()
@@ -1148,12 +1203,13 @@ def admin_stats():
         "total_videos":     total_vids,
         "uploaded":         uploaded,
         "total_channels":   total_chans,
-        "mrr":              (pro * 29) + (agency * 99),
+        "mrr":              (pro * 29) + (agency * 99) + (growth * 49),
         "pro_users":        pro,
         "agency_users":     agency,
+        "growth_users":     growth,
         "queue_pending":    queue_pending,
         "pending_payments": pending_pays,
-        "worker_online":    bool(celery_app),
+        "worker_online":    worker_online_status(),
     })
 
 @app.route("/api/admin/users")
@@ -1225,6 +1281,265 @@ def admin_save_social_keys():
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ── Static file serving ───────────────────────────────────────────────────────
+@app.route("/uploads/<path:filename>")
+def serve_uploads(filename):
+    uploads_dir = os.path.join(os.getcwd(), "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+    return send_from_directory(uploads_dir, filename)
+
+@app.route("/generated_videos/<path:filename>")
+def serve_generated(filename):
+    gen_dir = os.path.join(os.getcwd(), "generated_videos")
+    return send_from_directory(gen_dir, filename)
+
+# ── Queue status / cancel ─────────────────────────────────────────────────────
+@app.route("/api/queue/status")
+@login_required
+def queue_status():
+    db = get_db()
+    q_rows = db.execute(
+        "SELECT q.*, c.channel_name FROM queue q LEFT JOIN channels c ON q.channel_id=c.id "
+        "WHERE q.user_id=? ORDER BY q.created_at DESC LIMIT 30", (request.uid,)
+    ).fetchall()
+    v_rows = db.execute(
+        "SELECT v.*, c.channel_name FROM videos v LEFT JOIN channels c ON v.channel_id=c.id "
+        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50", (request.uid,)
+    ).fetchall()
+    total    = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=?", (request.uid,)).fetchone()[0]
+    uploaded = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'", (request.uid,)).fetchone()[0]
+    pending  = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'", (request.uid,)).fetchone()[0]
+    db.close()
+    return jsonify({
+        "queue":         [dict(r) for r in q_rows],
+        "videos":        [dict(r) for r in v_rows],
+        "stats":         {"total": total, "uploaded": uploaded, "pending": pending},
+        "worker_online": worker_online_status(),
+    })
+
+@app.route("/api/queue/<int:jid>/cancel", methods=["POST"])
+@login_required
+def cancel_job(jid):
+    db = get_db()
+    db.execute("UPDATE queue SET status='cancelled' WHERE id=? AND user_id=? AND status='pending'",
+               (jid, request.uid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+# ── Channel settings / social / autopilot / monetized ────────────────────────
+@app.route("/api/channels/<int:cid>/settings", methods=["POST"])
+@login_required
+def channel_settings(cid):
+    d  = request.get_json() or {}
+    db = get_db()
+    ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?", (cid, request.uid)).fetchone()
+    if not ch:
+        db.close(); return jsonify({"error": "Not found"}), 404
+    db.execute(
+        "UPDATE channels SET niche=?, video_type=?, schedule=? WHERE id=? AND user_id=?",
+        (d.get("niche"), d.get("voice_style"), d.get("upload_schedule"), cid, request.uid)
+    )
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+@app.route("/api/channels/<int:cid>/social", methods=["GET"])
+@login_required
+def get_channel_social(cid):
+    db   = get_db()
+    rows = db.execute("SELECT platform, active FROM social_accounts WHERE channel_id=? AND active=1",
+                      (cid,)).fetchall()
+    db.close()
+    return jsonify({r["platform"]: {"active": r["active"]} for r in rows})
+
+@app.route("/api/channels/<int:cid>/social", methods=["POST"])
+@login_required
+def save_channel_social(cid):
+    d           = request.get_json() or {}
+    platform    = d.get("platform")
+    credentials = json.dumps(d.get("credentials", {}))
+    db = get_db()
+    ex = db.execute("SELECT id FROM social_accounts WHERE channel_id=? AND platform=?",
+                    (cid, platform)).fetchone()
+    if ex:
+        db.execute("UPDATE social_accounts SET credentials=?, active=1 WHERE id=?",
+                   (credentials, ex["id"]))
+    else:
+        db.execute("INSERT INTO social_accounts (channel_id, platform, credentials) VALUES (?,?,?)",
+                   (cid, platform, credentials))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+@app.route("/api/channels/<int:cid>/social/<platform>", methods=["DELETE"])
+@login_required
+def delete_channel_social(cid, platform):
+    db = get_db()
+    db.execute("UPDATE social_accounts SET active=0 WHERE channel_id=? AND platform=?",
+               (cid, platform))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+@app.route("/api/channels/<int:cid>/autopilot", methods=["POST"])
+@login_required
+def toggle_autopilot(cid):
+    d       = request.get_json() or {}
+    enabled = 1 if d.get("enabled") else 0
+    db = get_db()
+    db.execute("UPDATE channels SET autopilot=? WHERE id=? AND user_id=?",
+               (enabled, cid, request.uid))
+    db.commit(); db.close()
+    return jsonify({"success": True, "autopilot": bool(enabled)})
+
+@app.route("/api/channels/<int:cid>/monetized", methods=["POST"])
+@login_required
+def mark_monetized(cid):
+    d         = request.get_json() or {}
+    monetized = 1 if d.get("monetized") else 0
+    db = get_db()
+    db.execute("UPDATE channels SET monetized=? WHERE id=? AND user_id=?",
+               (monetized, cid, request.uid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+# ── Account: password / branding / uploads / voice clone ─────────────────────
+@app.route("/api/account/password", methods=["POST"])
+@login_required
+def change_password():
+    d      = request.get_json() or {}
+    cur    = d.get("current", "")
+    new_pw = d.get("new", "")
+    if not new_pw or len(new_pw) < 6:
+        return jsonify({"error": "New password must be 6+ characters"}), 400
+    db = get_db()
+    u  = db.execute("SELECT id FROM users WHERE id=? AND password_hash=?",
+                    (request.uid, hash_pw(cur))).fetchone()
+    if not u:
+        db.close(); return jsonify({"error": "Current password incorrect"}), 400
+    db.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_pw(new_pw), request.uid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+@app.route("/api/account/branding", methods=["GET"])
+@login_required
+def get_branding():
+    db = get_db()
+    u  = db.execute(
+        "SELECT brand_color_primary, brand_color_accent, avatar_path, logo_path, custom_voice_id "
+        "FROM users WHERE id=?", (request.uid,)
+    ).fetchone()
+    db.close()
+    return jsonify(dict(u)) if u else (jsonify({"error": "Not found"}), 404)
+
+@app.route("/api/account/branding", methods=["POST"])
+@login_required
+def save_branding():
+    d  = request.get_json() or {}
+    db = get_db()
+    db.execute(
+        "UPDATE users SET brand_color_primary=?, brand_color_accent=? WHERE id=?",
+        (d.get("brand_color_primary", "#FFD700"), d.get("brand_color_accent", "#FFA500"), request.uid)
+    )
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+def _upload_file(ftype):
+    f = request.files.get("file")
+    if not f: return jsonify({"error": "No file"}), 400
+    ext = os.path.splitext(f.filename or "")[1].lower() or ".jpg"
+    uploads_dir = os.path.join(os.getcwd(), "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+    fname = f"{ftype}_{request.uid}{ext}"
+    f.save(os.path.join(uploads_dir, fname))
+    url = f"/uploads/{fname}"
+    db  = get_db()
+    col = "avatar_path" if ftype == "avatar" else "logo_path"
+    db.execute(f"UPDATE users SET {col}=? WHERE id=?", (url, request.uid))
+    db.commit(); db.close()
+    return jsonify({"success": True, "url": url})
+
+@app.route("/api/account/upload-avatar", methods=["POST"])
+@login_required
+def upload_avatar():
+    return _upload_file("avatar")
+
+@app.route("/api/account/upload-logo", methods=["POST"])
+@login_required
+def upload_logo():
+    return _upload_file("logo")
+
+@app.route("/api/account/clone-voice", methods=["POST"])
+@login_required
+def clone_voice():
+    if not ELEVENLABS_KEY:
+        return jsonify({"error": "ElevenLabs not configured — set ELEVENLABS_API_KEY"}), 503
+    f    = request.files.get("audio")
+    name = request.form.get("name", f"User {request.uid} Voice")
+    if not f: return jsonify({"error": "No audio file provided"}), 400
+    try:
+        boundary = b"----FormBoundary" + secrets.token_hex(8).encode()
+        body = b"".join([
+            b"--" + boundary + b"\r\n",
+            b'Content-Disposition: form-data; name="name"\r\n\r\n',
+            name.encode() + b"\r\n",
+            b"--" + boundary + b"\r\n",
+            b'Content-Disposition: form-data; name="files"; filename="voice.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n',
+            f.read() + b"\r\n",
+            b"--" + boundary + b"--\r\n",
+        ])
+        req = urllib.request.Request(
+            "https://api.elevenlabs.io/v1/voices/add", data=body,
+            headers={"xi-api-key": ELEVENLABS_KEY,
+                     "Content-Type": f"multipart/form-data; boundary={boundary.decode()}"}
+        )
+        with urllib.request.urlopen(req) as r:
+            voice_id = json.loads(r.read()).get("voice_id", "")
+        db = get_db()
+        db.execute("UPDATE users SET custom_voice_id=? WHERE id=?", (voice_id, request.uid))
+        db.commit(); db.close()
+        return jsonify({"success": True, "voice_id": voice_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ── Admin create-admin / channel toggles ─────────────────────────────────────
+@app.route("/api/admin/create-admin", methods=["POST"])
+@admin_required
+def admin_create_admin():
+    d        = request.get_json() or {}
+    email    = d.get("email", "").strip().lower()
+    name     = d.get("name", "")
+    password = d.get("password", "")
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO users (email, password_hash, full_name, plan, is_admin) VALUES (?,?,?,'admin',1)",
+            (email, hash_pw(password), name)
+        )
+    except sqlite3.IntegrityError:
+        db.execute("UPDATE users SET is_admin=1, plan='admin' WHERE email=?", (email,))
+    db.commit(); db.close()
+    return jsonify({"success": True, "message": f"Admin {email} created"})
+
+@app.route("/api/admin/channels/<int:cid>/autopilot", methods=["POST"])
+@admin_required
+def admin_toggle_autopilot(cid):
+    d       = request.get_json() or {}
+    enabled = 1 if d.get("enabled") else 0
+    db = get_db()
+    db.execute("UPDATE channels SET autopilot=? WHERE id=?", (enabled, cid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+@app.route("/api/admin/channels/<int:cid>/monetized", methods=["POST"])
+@admin_required
+def admin_mark_monetized(cid):
+    d         = request.get_json() or {}
+    monetized = 1 if d.get("monetized") else 0
+    db = get_db()
+    db.execute("UPDATE channels SET monetized=? WHERE id=?", (monetized, cid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.route("/health")
