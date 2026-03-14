@@ -1081,6 +1081,7 @@ def sync_channel(cid):
                     (cid, request.uid)).fetchone()
     if not ch:
     try:
+        pass
         from worker import refresh_yt_token
         token = refresh_yt_token(ch["refresh_token"])
         yt_req = urllib.request.Request(
