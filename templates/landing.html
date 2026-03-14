@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
 :root{
   --gold:#FFD700;--gold2:#FFA500;--dark:#050810;--dark2:#0a0f1e;
   --dark3:#111827;--text:#e8eaf0;--muted:#6b7280;--border:#1f2937;
@@ -133,7 +134,7 @@ footer p{color:var(--muted);font-size:14px}
   <p>FinanceFlow automatically generates, uploads, and grows multiple YouTube finance channels — while you sleep.</p>
   <div class="hero-btns">
     <a href="#" class="btn btn-gold" onclick="openModal('register')">Start for Free →</a>
-    <a href="#how" class="btn btn-outline">See how it works</a>
+    <a href="#how" class="btn btn-outline" onclick="event.preventDefault();document.getElementById('how').scrollIntoView({behavior:'smooth'})">See how it works</a>
   </div>
   <div class="hero-stats">
     <div>
