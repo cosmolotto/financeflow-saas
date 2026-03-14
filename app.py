@@ -215,23 +215,38 @@ def register():
         return jsonify({"token": token, "redirect": "/dashboard"})
     except sqlite3.IntegrityError:
         return jsonify({"error": "Email already registered"}), 400
+    except Exception as e:
+        import traceback
+        print(f"[REGISTER ERROR] {e}")
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error", "detail": str(e)}), 500
     finally:
         db.close()
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
-    d = request.get_json() or {}
-    email    = d.get("email", "").strip().lower()
-    password = d.get("password", "")
-    db = get_db()
-    user = db.execute("SELECT * FROM users WHERE email=? AND password_hash=?",
-                      (email, hash_pw(password))).fetchone()
-    db.close()
-    if not user:
-        return jsonify({"error": "Invalid email or password"}), 401
-    token = make_token(user["id"], bool(user["is_admin"]))
-    session["token"] = token
-    return jsonify({"token": token, "redirect": "/admin" if user["is_admin"] else "/dashboard"})
+    try:
+        d = request.get_json() or {}
+        print(f"[LOGIN] Raw payload: {d}")
+        email    = d.get("email", "").strip().lower()
+        password = d.get("password", "")
+        print(f"[LOGIN] email={email!r} password_set={bool(password)}")
+        db = get_db()
+        user = db.execute("SELECT * FROM users WHERE email=? AND password_hash=?",
+                          (email, hash_pw(password))).fetchone()
+        db.close()
+        if not user:
+            print(f"[LOGIN] No user found for email={email!r}")
+            return jsonify({"error": "Invalid email or password"}), 401
+        print(f"[LOGIN] Success for user_id={user['id']} is_admin={user['is_admin']}")
+        token = make_token(user["id"], bool(user["is_admin"]))
+        session["token"] = token
+        return jsonify({"token": token, "redirect": "/admin" if user["is_admin"] else "/dashboard"})
+    except Exception as e:
+        import traceback
+        print(f"[LOGIN ERROR] {e}")
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error", "detail": str(e)}), 500
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
