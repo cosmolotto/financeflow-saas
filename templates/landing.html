@@ -83,20 +83,20 @@ h2{font-family:'Syne',sans-serif;font-size:clamp(32px,4vw,52px);font-weight:800;
 .plan .btn{width:100%;text-align:center;padding:14px}
 
 /* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal-overlay.active{display:flex}
-.modal{background:var(--dark2);border:1px solid var(--border);border-radius:24px;padding:48px;width:100%;max-width:440px;position:relative}
+.modal{background:var(--dark2);border:1px solid var(--border);border-radius:24px;padding:48px;width:100%;max-width:440px;position:relative;max-height:calc(100vh - 40px);overflow-y:auto;-webkit-overflow-scrolling:touch;margin:auto}
 .modal h3{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;margin-bottom:8px}
 .modal p{color:var(--muted);margin-bottom:32px;font-size:15px}
 .form-group{margin-bottom:20px}
 .form-group label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:500}
-.form-group input{width:100%;padding:12px 16px;background:var(--dark);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;transition:border-color 0.2s;font-family:'DM Sans',sans-serif}
+.form-group input{width:100%;padding:12px 16px;background:var(--dark);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;transition:border-color 0.2s;font-family:'DM Sans',sans-serif;-webkit-appearance:none;appearance:none}
 .form-group input:focus{border-color:var(--gold)}
 .form-tabs{display:flex;gap:0;margin-bottom:32px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .tab{flex:1;padding:10px;text-align:center;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;color:var(--muted)}
 .tab.active{background:var(--gold);color:#000;font-weight:700}
-.modal-close{position:absolute;top:20px;right:20px;cursor:pointer;color:var(--muted);font-size:20px;background:none;border:none;color:var(--muted)}
-.modal-close:hover{color:var(--text)}
+.modal-close{position:absolute;top:16px;right:16px;cursor:pointer;font-size:22px;background:rgba(255,255,255,0.08);border:none;color:var(--text);width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:10;-webkit-tap-highlight-color:transparent}
+.modal-close:hover{background:rgba(255,255,255,0.15)}
 .error-msg{color:#ef4444;font-size:13px;margin-top:8px;display:none}
 
 /* FOOTER */
@@ -104,11 +104,19 @@ footer{padding:60px;border-top:1px solid var(--border);text-align:center}
 footer p{color:var(--muted);font-size:14px}
 
 @media(max-width:768px){
-  nav{padding:16px 20px}
+  nav{padding:14px 16px}
+  nav .links{gap:8px}
+  nav .links a:not(.btn){display:none}
+  nav .links .btn{padding:8px 14px;font-size:13px}
   .section,.pricing{padding:60px 20px}
   .steps,.features-grid,.plans{grid-template-columns:1fr}
-  .hero-stats{gap:32px}
+  .hero-stats{gap:32px;flex-wrap:wrap;justify-content:center}
   .hero{padding:100px 20px 60px}
+  .hero-btns{flex-direction:column;align-items:center}
+  .hero-btns .btn{width:100%;max-width:320px;text-align:center}
+  h1{letter-spacing:-1px}
+  .modal{padding:32px 20px;border-radius:18px}
+  .modal h3{font-size:22px}
 }
 </style>
 </head>
@@ -120,8 +128,8 @@ footer p{color:var(--muted);font-size:14px}
     <a href="#how">How it works</a>
     <a href="#features">Features</a>
     <a href="#pricing">Pricing</a>
-    <a href="#" class="btn btn-outline" onclick="openModal('login')">Login</a>
-    <a href="#" class="btn btn-gold" onclick="openModal('register')">Start Free</a>
+    <a href="#" class="btn btn-outline" onclick="openModal('login');return false;">Login</a>
+    <a href="#" class="btn btn-gold" onclick="openModal('register');return false;">Start Free</a>
   </div>
 </nav>
 
@@ -133,7 +141,7 @@ footer p{color:var(--muted);font-size:14px}
   <h1>Turn AI into a<br><span class="highlight">YouTube Income</span><br>Machine</h1>
   <p>FinanceFlow automatically generates, uploads, and grows multiple YouTube finance channels — while you sleep.</p>
   <div class="hero-btns">
-    <a href="#" class="btn btn-gold" onclick="openModal('register')">Start for Free →</a>
+    <a href="#" class="btn btn-gold" onclick="openModal('register');return false;">Start for Free →</a>
     <a href="#how" class="btn btn-outline" onclick="event.preventDefault();document.getElementById('how').scrollIntoView({behavior:'smooth'})">See how it works</a>
   </div>
   <div class="hero-stats">
@@ -402,10 +410,12 @@ footer p{color:var(--muted);font-size:14px}
 <script>
 function openModal(tab) {
   document.getElementById('authModal').classList.add('active');
+  document.body.style.overflow = 'hidden';
   switchTab(tab || 'register');
 }
 function closeModal() {
   document.getElementById('authModal').classList.remove('active');
+  document.body.style.overflow = '';
 }
 function switchTab(tab) {
   document.getElementById('registerForm').style.display = tab==='register' ? 'block' : 'none';
@@ -463,6 +473,10 @@ async function loginUser() {
 }
 document.getElementById('authModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
+});
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
 });
 // Auto-open reset password modal if ?show_reset=1
 {% if show_reset %}
