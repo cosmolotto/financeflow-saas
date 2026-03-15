@@ -88,25 +88,31 @@ def get_db():
     db.row_factory = sqlite3.Row
     return db
 
-def _db_exec(db, sql, params=()):
-    """Execute a query that works on both SQLite and PostgreSQL."""
+def pg_execute(db, sql, params=()):
+    """Execute SQL on both SQLite (db.execute) and PostgreSQL (cursor-based, %s placeholders)."""
     if _HAS_PG and DATABASE_URL:
+        cur = db.cursor()
         sql = sql.replace("?", "%s")
-    cur = db.cursor() if _HAS_PG and DATABASE_URL else db
-    if params:
-        cur.execute(sql, params)
+        if params:
+            cur.execute(sql, params)
+        else:
+            cur.execute(sql)
+        return cur
     else:
-        cur.execute(sql)
-    return cur
+        if params:
+            return db.execute(sql, params)
+        else:
+            return db.execute(sql)
+
+# Keep _db_exec as alias for backwards compat
+_db_exec = pg_execute
 
 def _fetchone(db, sql, params=()):
-    cur = db.cursor()
-    cur.execute(sql, params)
+    cur = pg_execute(db, sql, params)
     return cur.fetchone()
 
 def _fetchall(db, sql, params=()):
-    cur = db.cursor()
-    cur.execute(sql, params)
+    cur = pg_execute(db, sql, params)
     return cur.fetchall()
 
 def refresh_yt_token(rt):
@@ -330,7 +336,7 @@ def post_tiktok(creds,youtube_url,title):
 
 def cross_post_social(channel_id,video_id,youtube_url,title,niche,thumb_path):
     db=get_db()
-    accounts=db.execute("SELECT * FROM social_accounts WHERE channel_id=? AND active=1",(channel_id,)).fetchall()
+    accounts=_fetchall(db, "SELECT * FROM social_accounts WHERE channel_id=? AND active=1",(channel_id,))
     db.close()
     for acc in accounts:
         platform=acc["platform"]; creds=json.loads(acc["credentials"])
@@ -346,7 +352,7 @@ def cross_post_social(channel_id,video_id,youtube_url,title,niche,thumb_path):
         except Exception as e:
             status="failed"; err=str(e)[:200]
         db=get_db()
-        db.execute("INSERT INTO social_posts (video_id,channel_id,platform,post_url,status,error_msg) VALUES (?,?,?,?,?,?)",(video_id,channel_id,platform,post_url,status,err))
+        pg_execute(db, "INSERT INTO social_posts (video_id,channel_id,platform,post_url,status,error_msg) VALUES (?,?,?,?,?,?)",(video_id,channel_id,platform,post_url,status,err))
         db.commit(); db.close()
 
 def script_from_prompt(prompt,title,niche):
@@ -367,24 +373,24 @@ def process(job):
     cprompt=job["custom_prompt"] if job["custom_prompt"] else None
     ctitle=job["custom_title"] if job["custom_title"] else None
     print(f"\n{'='*52}\n⚡ Job {jid} | {vtype.upper()} | {niche}\n{'='*52}")
-    db.execute("UPDATE queue SET status='processing' WHERE id=?",(jid,)); db.commit()
+    pg_execute(db, "UPDATE queue SET status='processing' WHERE id=?",(jid,)); db.commit()
     sd={}
 
     def prog(msg):
         try:
-            d2=get_db(); d2.execute("UPDATE queue SET progress=? WHERE id=?",(msg,jid)); d2.commit(); d2.close()
+            d2=get_db(); pg_execute(d2, "UPDATE queue SET progress=? WHERE id=?",(msg,jid)); d2.commit(); d2.close()
         except: pass
         print(f"   {msg}")
 
     def done_fail(reason):
         short=str(reason)[:200]; print(f"\nFAILED: {short}")
-        db.execute("UPDATE queue SET status='failed',progress=? WHERE id=?",(f"Failed: {short}",jid))
-        db.execute("INSERT INTO videos (user_id,channel_id,title,type,status,error_msg) VALUES (?,?,?,?,'failed',?)",(uid,cid,sd.get("title","Unknown"),vtype,short))
+        pg_execute(db, "UPDATE queue SET status='failed',progress=? WHERE id=?",(f"Failed: {short}",jid))
+        pg_execute(db, "INSERT INTO videos (user_id,channel_id,title,type,status,error_msg) VALUES (?,?,?,?,'failed',?)",(uid,cid,sd.get("title","Unknown"),vtype,short))
         db.commit(); db.close()
 
     try:
         prog("Refreshing YouTube token...")
-        ch=db.execute("SELECT * FROM channels WHERE id=?",(cid,)).fetchone()
+        ch=_fetchone(db, "SELECT * FROM channels WHERE id=?",(cid,))
         if not ch: raise Exception("Channel not found")
         token=refresh_yt_token(ch["refresh_token"])
 
@@ -397,7 +403,7 @@ def process(job):
         wd=OUT/f"job_{jid}"; wd.mkdir(exist_ok=True)
         prog("Generating voice narration...")
         wav=str(wd/"voice.wav")
-        user_row=db.execute("SELECT custom_voice_id FROM users WHERE id=?",(uid,)).fetchone()
+        user_row=_fetchone(db, "SELECT custom_voice_id FROM users WHERE id=?",(uid,))
         voice_id=user_row["custom_voice_id"] if user_row and user_row["custom_voice_id"] else None
         if not make_voice(sd["script"],wav,voice_id=voice_id): raise Exception("Voice failed — set ELEVENLABS_API_KEY or ensure gTTS is installed (pip install gtts)")
         dur=get_duration(wav); print(f"   Duration: {dur:.1f}s")
@@ -429,10 +435,14 @@ def process(job):
         yt_url=f"https://youtube.com/{'shorts/' if vtype=='short' else 'watch?v='}{vid_id}"
         print(f"   LIVE: {yt_url}")
 
-        db.execute("INSERT INTO videos (user_id,channel_id,title,type,status,youtube_id,youtube_url,script) VALUES (?,?,?,?,'uploaded',?,?,?)",(uid,cid,sd["title"],vtype,vid_id,yt_url,sd["script"]))
-        vid_row_id=db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.execute("UPDATE channels SET videos_uploaded=videos_uploaded+1 WHERE id=?",(cid,))
-        db.execute("UPDATE queue SET status='done',progress='Uploaded to YouTube!' WHERE id=?",(jid,))
+        if _HAS_PG and DATABASE_URL:
+            cur = pg_execute(db, "INSERT INTO videos (user_id,channel_id,title,type,status,youtube_id,youtube_url,script) VALUES (?,?,?,?,'uploaded',?,?,?) RETURNING id",(uid,cid,sd["title"],vtype,vid_id,yt_url,sd["script"]))
+            vid_row_id = cur.fetchone()[0]
+        else:
+            cur = pg_execute(db, "INSERT INTO videos (user_id,channel_id,title,type,status,youtube_id,youtube_url,script) VALUES (?,?,?,?,'uploaded',?,?,?)",(uid,cid,sd["title"],vtype,vid_id,yt_url,sd["script"]))
+            vid_row_id = cur.lastrowid
+        pg_execute(db, "UPDATE channels SET videos_uploaded=videos_uploaded+1 WHERE id=?",(cid,))
+        pg_execute(db, "UPDATE queue SET status='done',progress='Uploaded to YouTube!' WHERE id=?",(jid,))
         db.commit(); db.close()
         print(f"Job {jid} COMPLETE!")
         prog("Cross-posting to social media...")
@@ -440,7 +450,7 @@ def process(job):
         # Auto-post to FinanceFlow's own Twitter if configured
         try:
             db2=get_db()
-            row=db2.execute("SELECT value FROM system_settings WHERE key='auto_post_on_upload'").fetchone()
+            row=_fetchone(db2, "SELECT value FROM system_settings WHERE key='auto_post_on_upload'")
             db2.close()
             if row and str(row["value"])=="1":
                 sys_creds={"api_key":os.environ.get("SYSTEM_TWITTER_API_KEY",""),
@@ -462,19 +472,16 @@ def check_autopilot():
     SCHEDULE_HOURS = {"daily": 24, "twice_daily": 12, "weekly": 168}
     db = get_db()
     try:
-        channels = db.execute(
-            "SELECT * FROM channels WHERE autopilot=1 AND active=1"
-        ).fetchall()
+        channels = _fetchall(db, "SELECT * FROM channels WHERE autopilot=1 AND active=1")
         queued = 0
         for ch in channels:
             schedule = (ch["schedule"] or "daily").lower()
             if schedule == "manual":
                 continue  # Never auto-queue manual channels
             hours_needed = SCHEDULE_HOURS.get(schedule, 24)
-            last_job = db.execute(
+            last_job = _fetchone(db,
                 "SELECT created_at FROM queue WHERE channel_id=? "
-                "ORDER BY created_at DESC LIMIT 1", (ch["id"],)
-            ).fetchone()
+                "ORDER BY created_at DESC LIMIT 1", (ch["id"],))
             if last_job:
                 try:
                     last_dt = datetime.datetime.fromisoformat(last_job["created_at"])
@@ -485,10 +492,9 @@ def check_autopilot():
                     pass
             # Auto-queue a video for this channel
             niche = ch["niche"] or "personal_finance"
-            db.execute(
+            pg_execute(db,
                 "INSERT INTO queue (user_id, channel_id, video_type, niche, mode) VALUES (?,?,?,?,'auto')",
-                (ch["user_id"], ch["id"], ch["video_type"] or "short", niche)
-            )
+                (ch["user_id"], ch["id"], ch["video_type"] or "short", niche))
             db.commit()
             queued += 1
             print(f"   [AUTOPILOT] Queued video for channel {ch['channel_name']} (id={ch['id']})")

@@ -93,6 +93,10 @@ except ImportError:
 # ── App & config ────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-railway")
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Secure flag: True in production (DATABASE_URL set = Railway), False for local HTTP dev
+app.config['SESSION_COOKIE_SECURE'] = bool(os.environ.get("DATABASE_URL"))
 
 DB = "financeflow.db"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -501,7 +505,7 @@ _bg_threads = []   # populated at startup — used by worker_online_status()
 
 def worker_online_status():
     # Check external worker.py heartbeat file first
-    HBEAT = "worker_heartbeat.txt"
+    HBEAT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker_heartbeat.txt")
     try:
         if os.path.exists(HBEAT):
             age = time.time() - float(open(HBEAT).read().strip())
@@ -1214,6 +1218,10 @@ def register():
         return jsonify({"error": "Email already registered"}), 400
     except Exception as e:
         pass
+        # Catch PostgreSQL duplicate key errors (psycopg2.IntegrityError)
+        err_lower = str(e).lower()
+        if "unique" in err_lower or "duplicate" in err_lower:
+            return jsonify({"error": "Email already registered"}), 400
         import traceback
         traceback.print_exc()
         print(f"[REGISTER ERROR] {e}")
@@ -2210,8 +2218,11 @@ def create_admin():
             "INSERT INTO users (email, password_hash, is_admin) VALUES (?,?,1)",
             (email,
              hash_pw(password)))
-    except sqlite3.IntegrityError:
-        db.execute("UPDATE users SET is_admin=1 WHERE email=?", (email,))
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower() or isinstance(e, sqlite3.IntegrityError):
+            db.execute("UPDATE users SET is_admin=1 WHERE email=?", (email,))
+        else:
+            raise
     db.commit()
     return jsonify({"status": "admin created"})
 
@@ -2689,10 +2700,12 @@ def admin_create_admin():
             "INSERT INTO users (email, password_hash, full_name, plan, is_admin) VALUES (?,?,?,'admin',1)",
             (email, hash_pw(password), name)
         )
-    except sqlite3.IntegrityError:
-        pass
-        db.execute(
-            "UPDATE users SET is_admin=1, plan='admin' WHERE email=?", (email,))
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower() or isinstance(e, sqlite3.IntegrityError):
+            db.execute(
+                "UPDATE users SET is_admin=1, plan='admin' WHERE email=?", (email,))
+        else:
+            raise
     db.commit()
     return jsonify({"success": True, "message": f"Admin {email} created"})
 

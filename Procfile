@@ -1,1 +1,2 @@
-web: gunicorn app:app --workers 1
+web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300
+worker: python3 worker.py

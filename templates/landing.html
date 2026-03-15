@@ -478,43 +478,6 @@ document.getElementById('authModal').addEventListener('click', function(e) {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeModal();
 });
-// Auto-open reset password modal if ?show_reset=1
-{% if show_reset %}
-window.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('authModal').classList.add('active');
-  document.getElementById('loginForm').style.display = 'none';
-  document.getElementById('registerForm').style.display = 'none';
-  document.getElementById('forgotForm').style.display = 'none';
-  document.getElementById('modalTitle').textContent = 'Set New Password';
-  document.getElementById('modalSub').textContent = 'Enter your new password below.';
-  document.getElementById('authModal').querySelector('.modal').insertAdjacentHTML('beforeend', `
-    <div id="resetForm">
-      <div class="form-group">
-        <label>New Password</label>
-        <input type="password" id="resetNewPw" placeholder="New password (min 6 chars)">
-      </div>
-      <div class="error-msg" id="resetError"></div>
-      <div id="resetSuccess" style="display:none;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:12px;color:#10b981;font-size:13px"></div>
-      <button class="btn btn-gold" style="width:100%;padding:14px;font-size:16px;margin-top:12px" onclick="doReset()">
-        Set New Password →
-      </button>
-    </div>
-  `);
-  document.querySelectorAll('.form-tabs,.tab').forEach(el => el.style.display = 'none');
-});
-async function doReset() {
-  const pw = document.getElementById('resetNewPw').value;
-  const err = document.getElementById('resetError');
-  const ok = document.getElementById('resetSuccess');
-  err.style.display = 'none'; ok.style.display = 'none';
-  if (!pw || pw.length < 6) { err.textContent = 'Password must be 6+ characters'; err.style.display = 'block'; return; }
-  const r = await fetch('/api/auth/reset-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:'{{ reset_token }}',password:pw})});
-  const d = await r.json();
-  if (d.error) { err.textContent = d.error; err.style.display = 'block'; }
-  else { ok.textContent = '✅ Password updated! You can now log in.'; ok.style.display = 'block'; setTimeout(() => switchTab('login'), 2000); }
-}
-{% endif %}
-
 // ── Password Reset ───────────────────────────────────────────────────────
 {% if show_reset %}
 window.addEventListener('DOMContentLoaded', function() {
