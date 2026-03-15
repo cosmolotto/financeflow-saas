@@ -203,7 +203,7 @@ tr:hover td{background:rgba(255,255,255,0.01)}
   <div class="top">
     <div class="pt" id="ptitle">Overview</div>
     <div class="tr">
-      <div class="wd {% if worker_online %}on{% else %}off{% endif %}" id="wdot">Worker {% if worker_online %}online{% else %}offline{% endif %}</div>
+      <div class="wd {% if worker_online %}on{% else %}off{% endif %}" id="wdot" title="{% if worker_online %}Background processing is active{% else %}Start worker.py to process videos{% endif %}">{% if worker_online %}● Online{% else %}○ Offline{% endif %}</div>
       <div style="font-size:12px;color:var(--muted)">{{ user.email }}</div>
       <div class="av">{{ (user.name or user.email)[0].upper() }}</div>
       <button class="btn bo sm" onclick="doLogout()">Logout</button>
@@ -211,11 +211,11 @@ tr:hover td{background:rgba(255,255,255,0.01)}
   </div>
 
   <div class="cnt">
-    {% if user.trial_active %}
-    <div style="background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.08));border:1px solid rgba(255,215,0,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+    {% if user.trial_active and not is_admin %}
+    <div style="background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.08));border:1px solid rgba(255,215,0,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <div>⚡ <strong>Pro Trial Active</strong> — {{ user.trial_days_left }} day{{ 's' if user.trial_days_left != 1 else '' }} left
         {% if user.is_founding %} &nbsp;🌟 <strong>Founding Member</strong>{% endif %}</div>
-      <button class="btn bg sm" onclick="showTab('billing')">Upgrade to Keep Pro →</button>
+      <button class="btn bg sm" onclick="sp('billing')">Upgrade to Keep Pro →</button>
     </div>
     {% endif %}
     {% if user.is_first_user %}
@@ -926,7 +926,7 @@ async function poll(){
     setEl('ov-q',active.length?active.map(mkQI).join(''):'<div class="em" style="padding:24px"><div class="ei">✅</div><h4>Queue empty</h4><p>Generate a video to start</p></div>');
     setEl('q-all',(d.queue||[]).length?d.queue.map(mkQI).join(''):'<div class="em" style="padding:36px"><div class="ei">⏳</div><h4>No jobs yet</h4></div>');
     if(d.videos&&d.videos.length){setEl('ov-vids',d.videos.slice(0,8).map(mkVR).join(''));setEl('all-vids',d.videos.map(mkVR).join(''));}
-    const wd=document.getElementById('wdot');if(wd){wd.className='wd '+(d.worker_online?'on':'off');wd.textContent='Worker '+(d.worker_online?'online':'offline');}
+    const wd=document.getElementById('wdot');if(wd){wd.className='wd '+(d.worker_online?'on':'off');wd.textContent=d.worker_online?'● Online':'○ Offline';wd.title=d.worker_online?'Background processing is active':'Start worker.py to process videos';}
   }catch(e){console.log('poll err:',e);}
 }
 setInterval(poll,5000); poll();

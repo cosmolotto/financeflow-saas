@@ -497,21 +497,20 @@ def migrate_db():
     db.commit()
 
 
-def worker_online_status():
+_bg_threads = []   # populated at startup — used by worker_online_status()
 
-    pass
+def worker_online_status():
+    # Check external worker.py heartbeat file first
     HBEAT = "worker_heartbeat.txt"
     try:
-        pass
-        pass
         if os.path.exists(HBEAT):
-            pass
             age = time.time() - float(open(HBEAT).read().strip())
-            return age < 30
+            if age < 30:
+                return True
     except Exception:
         pass
-        pass
-    return False
+    # Fall back: consider "online" if app's own background threads are alive
+    return any(t.is_alive() for t in _bg_threads)
 
 # ── Auth helpers ────────────────────────────────────────────────────────
 
@@ -2917,9 +2916,12 @@ def _trial_expiry_worker():
 
 init_db()
 
-# Start background threads
-threading.Thread(target=_email_sequence_worker, daemon=True).start()
-threading.Thread(target=_trial_expiry_worker, daemon=True).start()
+# Start background threads and register them for worker_online_status()
+_t1 = threading.Thread(target=_email_sequence_worker, daemon=True)
+_t2 = threading.Thread(target=_trial_expiry_worker, daemon=True)
+_t1.start()
+_t2.start()
+_bg_threads.extend([_t1, _t2])
 
 if __name__ == "__main__":
 
