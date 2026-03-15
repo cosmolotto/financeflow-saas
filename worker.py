@@ -520,6 +520,15 @@ if __name__=="__main__":
     except: print("ERROR: pip3 install Pillow --break-system-packages"); sys.exit(1)
     print(f"Output dir: {OUT}\n")
 
+    # ── Ensure all DB tables exist (important on fresh PostgreSQL) ────────
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from app import init_db
+        init_db()
+        print("[STARTUP] init_db() complete")
+    except Exception as e:
+        print(f"[STARTUP] init_db() failed: {e}")
+
     # ── Reset any jobs stuck in 'processing' from a previous crash ───────
     try:
         db = get_db()
