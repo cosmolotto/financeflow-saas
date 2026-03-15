@@ -1606,8 +1606,8 @@ def generate_video():
         "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_prompt, custom_title) VALUES (?,?,?,?,?,?)",
         (request.uid, channel_id, video_type, niche, custom_prompt, custom_title)
     ).lastrowid
+    db.commit()
     if celery_app:
-        pass
         process_video_task.delay(job_id)
         return jsonify({"success": True, "job_id": job_id,
                        "status": "queued", "queue": "celery"})
@@ -1708,6 +1708,7 @@ def save_social(cid):
             (cid,
              platform,
              credentials))
+    db.commit()
     return jsonify({"status": "saved"})
 
 # ── Prompts API ─────────────────────────────────────────────────────────
@@ -2202,15 +2203,13 @@ def create_admin():
     password = d.get("password", "")
     db = get_db()
     try:
-        pass
-        pass
         db.execute(
             "INSERT INTO users (email, password_hash, is_admin) VALUES (?,?,1)",
             (email,
              hash_pw(password)))
     except sqlite3.IntegrityError:
-        pass
         db.execute("UPDATE users SET is_admin=1 WHERE email=?", (email,))
+    db.commit()
     return jsonify({"status": "admin created"})
 
 
@@ -2905,6 +2904,7 @@ def _trial_expiry_worker():
             db.execute(
                 "UPDATE users SET plan='starter' WHERE trial_ends_at > 0 AND trial_ends_at < ? "
                 "AND plan IN ('pro','agency')", (now,))
+            db.commit()
         except Exception as e:
             pass
             print(f"[TRIAL EXPIRY] Error: {e}")
