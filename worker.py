@@ -116,9 +116,23 @@ def _fetchall(db, sql, params=()):
     return cur.fetchall()
 
 def refresh_yt_token(rt):
+    print(f"   [TOKEN] Refreshing with client_id={CLIENT_ID[:20]}..." if CLIENT_ID else "   [TOKEN] WARNING: GOOGLE_CLIENT_ID is not set!")
+    print(f"   [TOKEN] refresh_token present={bool(rt)} length={len(rt) if rt else 0}")
     data=urllib.parse.urlencode({"refresh_token":rt,"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET,"grant_type":"refresh_token"}).encode()
-    with urllib.request.urlopen(urllib.request.Request("https://oauth2.googleapis.com/token",data=data,headers={"Content-Type":"application/x-www-form-urlencoded"})) as r:
-        return json.loads(r.read())["access_token"]
+    req=urllib.request.Request("https://oauth2.googleapis.com/token",data=data,headers={"Content-Type":"application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            body=r.read()
+            parsed=json.loads(body)
+            if "access_token" not in parsed:
+                print(f"   [TOKEN] ERROR: no access_token in response: {body.decode()[:300]}")
+                raise Exception(f"No access_token in response: {body.decode()[:300]}")
+            print("   [TOKEN] Refresh OK")
+            return parsed["access_token"]
+    except urllib.error.HTTPError as e:
+        body=e.read().decode("utf-8","replace")
+        print(f"   [TOKEN] HTTP {e.code} error: {body[:500]}")
+        raise Exception(f"Token refresh failed HTTP {e.code}: {body[:300]}")
 
 def make_voice(text, out_wav, voice_id=None, rate=165):
     # Try ElevenLabs first if key is available
