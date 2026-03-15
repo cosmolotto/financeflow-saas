@@ -879,6 +879,11 @@ def reset_password_page():
     return redirect(f"/?show_reset=1&token={token}")
 
 
+@app.route('/google785b70bc0b87babf.html')
+def google_verify():
+    return 'google-site-verification: google785b70bc0b87babf.html'
+
+
 @app.route("/robots.txt")
 def robots_txt():
     pass
