@@ -220,8 +220,15 @@ def make_music(out,dur=60):
 def make_frames(sd,dur,fdir,vtype):
     os.makedirs(fdir,exist_ok=True)
     W,H=(1080,1920) if vtype=="short" else (1920,1080)
-    FPS=24; c,a=sd["color"],sd["accent"]; lines=sd["lines"]
-    nf=int(dur*FPS); cd=dur/max(len(lines),1)
+    FPS=12; c,a=sd["color"],sd["accent"]; lines=sd["lines"]
+    nf=int(dur*FPS)
+    # Cap frames to limit memory usage on Railway (512MB RAM)
+    MAX_FRAMES = 300 if vtype=="short" else 500
+    if nf > MAX_FRAMES:
+        print(f"   [FRAMES] Capping {nf} → {MAX_FRAMES} frames to reduce memory")
+        nf = MAX_FRAMES
+        dur = nf / FPS
+    cd=dur/max(len(lines),1)
     for f in range(nf):
         t=f/FPS; li=min(int(t/cd),len(lines)-1)
         img=Image.new("RGB",(W,H)); draw=ImageDraw.Draw(img)
@@ -241,7 +248,7 @@ def make_frames(sd,dur,fdir,vtype):
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,f/fade)
         elif f>nf-fade:
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,max(0,(nf-f)/fade))
-        img.save(f"{fdir}/f{f:06d}.jpg",quality=78)
+        img.save(f"{fdir}/f{f:06d}.jpg",quality=60)
     return FPS
 
 def make_thumb(sd,out,vtype):
@@ -261,9 +268,9 @@ def render_video(fdir,audio,out,fps):
     print(f"   [RENDER] ffmpeg={FFMPEG} frames={frame_count} audio={audio_size}B fps={fps}")
 
     if FFMPEG:
-        cmd=[FFMPEG,"-y","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
-             "-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p",
-             "-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",out]
+        cmd=[FFMPEG,"-y","-threads","1","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
+             "-c:v","libx264","-preset","ultrafast","-crf","28","-pix_fmt","yuv420p",
+             "-c:a","aac","-b:a","128k","-shortest","-movflags","+faststart",out]
         r=subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
             print(f"   [RENDER] ffmpeg exited {r.returncode}")
@@ -302,13 +309,16 @@ def render_video(fdir,audio,out,fps):
         return False
 
 def upload_youtube(token,mp4,title,desc,tags):
+    print(f"   [UPLOAD] token={token[:20]}... file={mp4} size={os.path.getsize(mp4)/1024/1024:.2f}MB")
     fs=os.path.getsize(mp4)
     meta=json.dumps({"snippet":{"title":title[:100],"description":desc[:4990],"tags":[t[:30] for t in tags[:15]],"categoryId":"22","defaultLanguage":"en"},"status":{"privacyStatus":"public","selfDeclaredMadeForKids":False}}).encode()
     try:
         init=urllib.request.Request("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",data=meta,headers={"Authorization":f"Bearer {token}","Content-Type":"application/json; charset=UTF-8","X-Upload-Content-Type":"video/mp4","X-Upload-Content-Length":str(fs)})
         with urllib.request.urlopen(init) as r: up_url=r.headers["Location"]
     except urllib.error.HTTPError as e:
-        raise Exception(f"Upload init failed: {e.read().decode()[:150]}")
+        body=e.read().decode("utf-8","replace")
+        print(f"   [UPLOAD] Init HTTP {e.code}: {body[:300]}")
+        raise Exception(f"Upload init failed HTTP {e.code}: {body[:200]}")
     chunk=5*1024*1024; uploaded=0; vid_id=None
     with open(mp4,"rb") as f:
         while uploaded<fs:
