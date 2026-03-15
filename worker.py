@@ -256,20 +256,49 @@ def make_thumb(sd,out,vtype):
     img.save(out,quality=95)
 
 def render_video(fdir,audio,out,fps):
+    frame_count = len([f for f in os.listdir(fdir) if f.endswith(".jpg")]) if os.path.isdir(fdir) else 0
+    audio_size  = os.path.getsize(audio) if os.path.exists(audio) else 0
+    print(f"   [RENDER] ffmpeg={FFMPEG} frames={frame_count} audio={audio_size}B fps={fps}")
+
     if FFMPEG:
-        r=subprocess.run([FFMPEG,"-y","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,"-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p","-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",out],capture_output=True)
-        if os.path.exists(out): return True
+        cmd=[FFMPEG,"-y","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
+             "-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p",
+             "-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",out]
+        r=subprocess.run(cmd, capture_output=True)
+        if r.returncode != 0:
+            print(f"   [RENDER] ffmpeg exited {r.returncode}")
+            print(f"   [RENDER] stderr: {r.stderr.decode('utf-8','replace')[-600:]}")
+        if os.path.exists(out):
+            size=os.path.getsize(out)
+            if size == 0:
+                print("   [RENDER] ffmpeg produced 0-byte file — treating as failure")
+                os.remove(out)
+            else:
+                print(f"   [RENDER] ffmpeg OK — {size/1024/1024:.2f}MB")
+                return True
+
     # moviepy fallback (no system ffmpeg needed)
+    print("   [RENDER] Trying moviepy fallback...")
     try:
         from moviepy.editor import ImageSequenceClip, AudioFileClip
         frames = sorted([f"{fdir}/{fn}" for fn in os.listdir(fdir) if fn.endswith(".jpg")])
+        print(f"   [RENDER] moviepy: {len(frames)} frames")
         clip = ImageSequenceClip(frames, fps=fps)
         aclip = AudioFileClip(audio)
         clip = clip.set_audio(aclip)
         clip.write_videofile(out, codec="libx264", audio_codec="aac", logger=None)
-        return os.path.exists(out)
+        if os.path.exists(out):
+            size=os.path.getsize(out)
+            if size == 0:
+                print("   [RENDER] moviepy produced 0-byte file")
+                os.remove(out)
+                return False
+            print(f"   [RENDER] moviepy OK — {size/1024/1024:.2f}MB")
+            return True
+        return False
     except Exception as e:
-        print(f"   moviepy fallback failed: {e}")
+        print(f"   [RENDER] moviepy failed: {e}")
+        import traceback; traceback.print_exc()
         return False
 
 def upload_youtube(token,mp4,title,desc,tags):
