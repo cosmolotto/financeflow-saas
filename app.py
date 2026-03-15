@@ -1316,6 +1316,7 @@ def do_reset_password():
         "UPDATE users SET password_hash=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
         (hash_pw(new_pass),
          user["id"]))
+    db.commit()
     return jsonify({"status": "Password updated successfully"})
 
 
@@ -1497,6 +1498,7 @@ def update_channel(cid):
          d.get("schedule"),
          cid,
          request.uid))
+    db.commit()
     return jsonify({"status": "updated"})
 
 
@@ -1508,11 +1510,8 @@ def sync_channel(cid):
     ch = db.execute("SELECT * FROM channels WHERE id=? AND user_id=?",
                     (cid, request.uid)).fetchone()
     if not ch:
-        pass
+        return jsonify({"error": "Channel not found"}), 404
     try:
-        pass
-        pass
-        pass
         from worker import refresh_yt_token
         token = refresh_yt_token(ch["refresh_token"])
         yt_req = urllib.request.Request(
@@ -1538,10 +1537,11 @@ def sync_channel(cid):
                     "viewCount", 0)), int(
                         stats.get(
                             "videoCount", 0)), pic, cid))
+        db.commit()
         return jsonify({"success": True, "subscriber_count": int(
             stats.get("subscriberCount", 0))})
     except Exception as e:
-        pass
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/channels/<int:cid>", methods=["DELETE"])
@@ -1553,6 +1553,7 @@ def delete_channel(cid):
         "UPDATE channels SET active=0 WHERE id=? AND user_id=?",
         (cid,
          request.uid))
+    db.commit()
     return jsonify({"status": "deleted"})
 
 # ── Video / Queue API ───────────────────────────────────────────────────
@@ -1740,6 +1741,7 @@ def create_prompt():
         "INSERT INTO prompts (user_id, title, body, niche) VALUES (?,?,?,?)",
         (request.uid, title, body, niche)
     ).lastrowid
+    db.commit()
     return jsonify({"success": True, "id": pid})
 
 
@@ -1750,6 +1752,7 @@ def delete_prompt(pid):
     db = get_db()
     db.execute("DELETE FROM prompts WHERE id=? AND user_id=?",
                (pid, request.uid))
+    db.commit()
     return jsonify({"success": True})
 
 # ── Referral API ────────────────────────────────────────────────────────
@@ -1806,6 +1809,7 @@ def submit_promotion():
             {"error": "You already have a pending promotion review"}), 400
     db.execute("INSERT INTO promotions (user_id, tweet_url) VALUES (?,?)",
                (request.uid, tweet_url))
+    db.commit()
     return jsonify(
         {"success": True, "message": "Submitted! Admin will review within 48h."})
 
@@ -1867,6 +1871,7 @@ def payment_request():
         "INSERT INTO payments (user_id, amount, plan, provider, payment_method, reference, status) VALUES (?,?,?,?,?,?,'pending')",
         (request.uid, amount, plan, provider, provider, reference)
     ).lastrowid
+    db.commit()
     if reference:
         pass
         db2 = get_db()
@@ -2264,6 +2269,7 @@ def admin_set_plan(uid):
     db = get_db()
     db.execute("UPDATE users SET plan=? WHERE id=?",
                (d.get("plan", "starter"), uid))
+    db.commit()
     return jsonify({"status": "updated"})
 
 
@@ -2288,6 +2294,7 @@ def admin_delete_user(uid):
     db.execute("DELETE FROM email_sequences WHERE user_id=?", (uid,))
     db.execute("DELETE FROM promotions WHERE user_id=?", (uid,))
     db.execute("DELETE FROM users    WHERE id=?", (uid,))
+    db.commit()
     return jsonify({"status": "deleted"})
 
 
@@ -2334,13 +2341,12 @@ def admin_save_social_keys():
         existing[platform] = creds
         val = json.dumps(existing)
         if sk_row:
-            pass
             db.execute(
                 "UPDATE system_settings SET value=? WHERE key='social_keys'", (val,))
         else:
-            pass
             db.execute(
                 "INSERT INTO system_settings (key, value) VALUES ('social_keys',?)", (val,))
+        db.commit()
         return jsonify({"status": "saved"})
     except Exception as e:
         pass
@@ -2406,6 +2412,7 @@ def cancel_job(jid):
         "UPDATE queue SET status='cancelled' WHERE id=? AND user_id=? AND status='pending'",
         (jid,
          request.uid))
+    db.commit()
     return jsonify({"success": True})
 
 # ── Channel settings / social / autopilot / monetized ────────────────────────
@@ -2422,7 +2429,7 @@ def channel_settings(cid):
         (cid,
          request.uid)).fetchone()
     if not ch:
-        pass
+        return jsonify({"error": "Channel not found"}), 404
     db.execute(
         "UPDATE channels SET niche=?, video_type=?, schedule=? WHERE id=? AND user_id=?",
         (d.get("niche"),
@@ -2430,6 +2437,7 @@ def channel_settings(cid):
          d.get("upload_schedule"),
          cid,
          request.uid))
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2470,6 +2478,7 @@ def save_channel_social(cid):
             (cid,
              platform,
              credentials))
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2482,6 +2491,7 @@ def delete_channel_social(cid, platform):
         "UPDATE social_accounts SET active=0 WHERE channel_id=? AND platform=?",
         (cid,
          platform))
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2494,6 +2504,7 @@ def toggle_autopilot(cid):
     db = get_db()
     db.execute("UPDATE channels SET autopilot=? WHERE id=? AND user_id=?",
                (enabled, cid, request.uid))
+    db.commit()
     return jsonify({"success": True, "autopilot": bool(enabled)})
 
 
@@ -2506,6 +2517,7 @@ def mark_monetized(cid):
     db = get_db()
     db.execute("UPDATE channels SET monetized=? WHERE id=? AND user_id=?",
                (monetized, cid, request.uid))
+    db.commit()
     return jsonify({"success": True})
 
 # ── Account: password / branding / uploads / voice clone ─────────────────────
@@ -2528,9 +2540,10 @@ def change_password():
          )).fetchone()
     u = u_row if u_row and check_pw(cur, u_row["password_hash"]) else None
     if not u:
-        pass
+        return jsonify({"error": "Current password is incorrect"}), 401
     db.execute("UPDATE users SET password_hash=? WHERE id=?",
                (hash_pw(new_pw), request.uid))
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2555,6 +2568,7 @@ def save_branding():
         "UPDATE users SET brand_color_primary=?, brand_color_accent=? WHERE id=?", (d.get(
             "brand_color_primary", "#FFD700"), d.get(
             "brand_color_accent", "#FFA500"), request.uid))
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2579,6 +2593,7 @@ def _upload_file(ftype):
     db = get_db()
     col = "avatar_path" if ftype == "avatar" else "logo_path"
     db.execute(f"UPDATE users SET {col}=? WHERE id=?", (url, request.uid))
+    db.commit()
     return jsonify({"success": True, "url": url})
 
 
@@ -2604,6 +2619,7 @@ def onboarding_complete():
     db = get_db()
     db.execute(
         "UPDATE users SET onboarding_complete=1 WHERE id=?", (request.uid,))
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2643,6 +2659,7 @@ def clone_voice():
         db = get_db()
         db.execute("UPDATE users SET custom_voice_id=? WHERE id=?",
                    (voice_id, request.uid))
+        db.commit()
         return jsonify({"success": True, "voice_id": voice_id})
     except Exception as e:
         pass
@@ -2674,6 +2691,7 @@ def admin_create_admin():
         pass
         db.execute(
             "UPDATE users SET is_admin=1, plan='admin' WHERE email=?", (email,))
+    db.commit()
     return jsonify({"success": True, "message": f"Admin {email} created"})
 
 
@@ -2685,6 +2703,7 @@ def admin_toggle_autopilot(cid):
     enabled = 1 if d.get("enabled") else 0
     db = get_db()
     db.execute("UPDATE channels SET autopilot=? WHERE id=?", (enabled, cid))
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2696,6 +2715,7 @@ def admin_mark_monetized(cid):
     monetized = 1 if d.get("monetized") else 0
     db = get_db()
     db.execute("UPDATE channels SET monetized=? WHERE id=?", (monetized, cid))
+    db.commit()
     return jsonify({"success": True})
 
 # ── Admin promotions ────────────────────────────────────────────────────
@@ -2720,7 +2740,7 @@ def approve_promotion(pid):
     promo = db.execute(
         "SELECT * FROM promotions WHERE id=?", (pid,)).fetchone()
     if not promo:
-        pass
+        return jsonify({"error": "Promotion not found"}), 404
     db.execute("UPDATE promotions SET status='approved', channel_granted=1, "
                "reviewed_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
     # Grant extra channel slot by upgrading plan (simplified: just mark as
@@ -2735,6 +2755,7 @@ def approve_promotion(pid):
                    <h2>Your free channel slot is approved!</h2>
                    <p>Thanks for spreading the word about FinanceFlow.</p>
                    <a href="{APP_URL}/dashboard">Go to Dashboard →</a></div>""")
+    db.commit()
     return jsonify({"success": True})
 
 
@@ -2747,6 +2768,7 @@ def reject_promotion(pid):
         "UPDATE promotions SET status='rejected', reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
         (pid,
          ))
+    db.commit()
     return jsonify({"success": True})
 
 # ── Admin system settings ───────────────────────────────────────────────
@@ -2779,6 +2801,7 @@ def admin_save_settings():
             pass
             db.execute(
                 "INSERT INTO system_settings (key, value) VALUES (?,?)", (k, str(v)))
+    db.commit()
     return jsonify({"success": True})
 
 # ── Health ──────────────────────────────────────────────────────────────
