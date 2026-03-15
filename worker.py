@@ -77,6 +77,12 @@ SCRIPTS = {
   {"title":"5 Side Hustles You Can Start With $0","script":"Five side hustles you can start today with zero money. Freelance writing on Upwork or Fiverr. Virtual assistant work, 15 to 25 dollars per hour. Social media management for local businesses. Reselling thrift store finds on eBay. Tutoring in any subject you know. Any one of these can make 500 to 2000 extra dollars per month within 60 days.","color":(70,0,120),"accent":(180,80,255),"lines":["5 SIDE HUSTLES","START WITH $0","FREELANCING","VA WORK $25/HR","SOCIAL MEDIA MGT","THRIFT RESELL","TUTORING","$500-2000/MONTH"]},
   {"title":"Digital Products — Make Money While You Sleep","script":"Digital products are the best side hustle in 2025. You create something once, a template, guide, preset or course, and sell it forever. Sell on Etsy, Gumroad or your own site. Month one you make 200. Month three you make 800. Month six you could hit 3,000 or more. Zero inventory, zero shipping, pure profit. Anyone with a skill can do this.","color":(100,60,0),"accent":(255,200,50),"lines":["DIGITAL PRODUCTS","MAKE MONEY","WHILE YOU SLEEP","MAKE IT ONCE","SELL FOREVER","MONTH 1 = $200","MONTH 6 = $3K+","ZERO INVENTORY"]},
 ],
+"financeflow_promo": [
+  {"title":"I Automated My YouTube Channel With AI — Here's How","script":"I automated my entire YouTube finance channel with AI and it uploads videos while I sleep. The tool is called FinanceFlow. It writes the script, records the voice, generates the video, and uploads it to YouTube automatically. I went from zero videos to posting daily without recording a single thing. Try it free at web-production-39b44.up.railway.app","color":(20,20,60),"accent":(255,215,0),"lines":["I AUTOMATED","MY YOUTUBE","CHANNEL WITH AI","SCRIPTS ✓","VOICE ✓","VIDEO ✓","AUTO-UPLOAD ✓","TRY FREE NOW"]},
+  {"title":"This AI Tool Uploads YouTube Videos While I Sleep","script":"What if your YouTube channel uploaded videos automatically every single day without you doing anything? That is exactly what FinanceFlow does. It uses AI to generate finance videos, add voice narration, create thumbnails, and upload to YouTube on autopilot. I have been using it for 30 days and my channel grew without me touching it once. Link in bio — try it free.","color":(10,40,80),"accent":(100,200,255),"lines":["YOUTUBE ON","AUTOPILOT","GENERATE","VOICE","THUMBNAIL","UPLOAD","ALL AUTOMATIC","TRY FREE"]},
+  {"title":"FinanceFlow Review — Automated YouTube for Finance","script":"Here is my honest FinanceFlow review after 30 days. It creates finance videos automatically using AI. You connect your YouTube channel, pick a niche like personal finance or crypto, and it handles everything. Scripts, voice, video, upload. The videos look professional. My channel went from zero to 30 videos in 30 days. The free trial is 7 days with no credit card. web-production-39b44.up.railway.app","color":(60,10,10),"accent":(255,215,0),"lines":["FINANCEFLOW","HONEST REVIEW","30 DAYS TESTED","AUTO SCRIPTS","AI VOICE","AUTO UPLOAD","ZERO EFFORT","7-DAY FREE TRIAL"]},
+  {"title":"How to Make Money on YouTube Without Recording Videos","script":"You can build a profitable YouTube channel without ever recording a single video. Use AI automation. Tools like FinanceFlow write the scripts, generate AI voice narration, create the visuals, and upload automatically. Finance channels can monetize at 1,000 subscribers and earn thousands per month from ad revenue. Start your automated channel today at web-production-39b44.up.railway.app","color":(0,50,30),"accent":(100,255,150),"lines":["MAKE MONEY","ON YOUTUBE","WITHOUT","RECORDING","AI WRITES","AI SPEAKS","AI UPLOADS","START TODAY"]},
+],
 }
 
 def get_db():
@@ -511,7 +517,7 @@ def process(job):
                            "access_token":os.environ.get("SYSTEM_TWITTER_ACCESS_TOKEN",""),
                            "access_secret":os.environ.get("SYSTEM_TWITTER_ACCESS_SECRET","")}
                 if all(sys_creds.values()):
-                    tweet_text=f"🚀 New finance video just dropped: {sd['title']}\n\nMade with FinanceFlow.app — AI YouTube automation\n\n{yt_url}\n\n#personalfinance #finance #money"[:280]
+                    tweet_text=f"🚀 Another creator just automated their YouTube channel with FinanceFlow!\n\n{yt_url}\n\n#YouTubeAutomation #AIContent #FinanceFlow #PassiveIncome"[:280]
                     post_twitter(sys_creds,yt_url,tweet_text,niche)
                     print("   📣 System Twitter post sent")
         except Exception as e:
@@ -554,6 +560,44 @@ def check_autopilot():
         return queued
     except Exception as e:
         print(f"   [AUTOPILOT] Error: {e}")
+        return 0
+    finally:
+        db.close()
+
+def check_system_channel():
+    """Queue a daily promo video for FinanceFlow's own system YouTube channel."""
+    import datetime
+    db = get_db()
+    try:
+        row = _fetchone(db, "SELECT value FROM system_settings WHERE key='system_channel_id'")
+        if not row or not row["value"]:
+            return 0
+        cid = int(row["value"])
+        ch = _fetchone(db, "SELECT * FROM channels WHERE id=? AND active=1", (cid,))
+        if not ch:
+            print(f"   [SYSTEM_CH] Channel id={cid} not found or inactive")
+            return 0
+        # Check if a promo video was already queued in the last 20 hours
+        last_job = _fetchone(db,
+            "SELECT created_at FROM queue WHERE channel_id=? ORDER BY created_at DESC LIMIT 1",
+            (cid,))
+        if last_job:
+            try:
+                last_dt = datetime.datetime.fromisoformat(str(last_job["created_at"]))
+                age_h = (datetime.datetime.utcnow() - last_dt).total_seconds() / 3600
+                if age_h < 20:
+                    return 0
+            except Exception:
+                pass
+        uid = ch["user_id"]
+        pg_execute(db,
+            "INSERT INTO queue (user_id, channel_id, video_type, niche, mode) VALUES (?,?,?,?,'auto')",
+            (uid, cid, "short", "financeflow_promo"))
+        db.commit()
+        print(f"   [SYSTEM_CH] Queued promo video for system channel id={cid}")
+        return 1
+    except Exception as e:
+        print(f"   [SYSTEM_CH] Error: {e}")
         return 0
     finally:
         db.close()
@@ -624,11 +668,14 @@ if __name__=="__main__":
             else:
                 idle_count += 1
                 print(f"[{ts}] Poll: pending={n_pending} processing={n_processing} done={n_done} failed={n_failed} | idle #{idle_count}")
-                # Check autopilot every 6 idle cycles (~60s)
+                # Check autopilot + system channel every 6 idle cycles (~60s)
                 if idle_count % 6 == 0:
                     n = check_autopilot()
                     if n:
                         print(f"[{ts}] [AUTOPILOT] {n} job(s) queued")
+                    s = check_system_channel()
+                    if s:
+                        print(f"[{ts}] [SYSTEM_CH] Promo video queued")
 
         except KeyboardInterrupt:
             print("\nWorker stopped.")

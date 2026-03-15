@@ -2381,6 +2381,59 @@ def admin_save_social_keys():
         pass
         return jsonify({"error": str(e)}), 500
 
+# ── Reddit templates + System channel ──────────────────────────────────
+
+REDDIT_TEMPLATES = [
+    {
+        "subreddit": "r/passive_income",
+        "title": "I automated my YouTube channel completely — here's how it generates income while I sleep",
+        "body": "Been using an AI tool called FinanceFlow for the past few months and wanted to share the results.\n\nThe system automatically:\n- Generates short-form finance/investing content\n- Uploads to YouTube on a schedule\n- Handles all the SEO metadata\n\nI went from 0 to [X] subscribers without recording a single video myself. The channel covers [niche] and monetization kicked in at 1,000 subs.\n\nHappy to answer questions about the setup. The tool is at [your Railway URL]\n\n**Edit:** For those asking — no, I'm not affiliated, just a user sharing results."
+    },
+    {
+        "subreddit": "r/SaaS",
+        "title": "Built a YouTube automation SaaS — here's what I learned shipping it",
+        "body": "Just launched FinanceFlow, a tool that auto-generates and uploads YouTube Shorts for finance creators.\n\n**The stack:**\n- Python/Flask backend\n- ffmpeg + moviepy for video rendering\n- YouTube Data API v3 for uploads\n- Railway for hosting\n\n**What surprised me:**\n1. Memory management on cheap VPS is the hardest part (ffmpeg loves RAM)\n2. YouTube's OAuth refresh flow breaks in weird ways in production\n3. Users want autopilot more than customization\n\nMRR is early but growing. Happy to share learnings or answer questions.\n\nSite: [your Railway URL]"
+    },
+    {
+        "subreddit": "r/youtubers",
+        "title": "How I'm posting daily finance Shorts without filming anything",
+        "body": "Quick breakdown of my current setup for anyone curious about faceless YouTube:\n\n**Niche:** Personal finance / investing tips\n**Format:** 60-second Shorts with text overlays\n**Posting schedule:** 1-2 per day, fully automated\n\nI use FinanceFlow ([your Railway URL]) which handles script → voiceover → video → upload automatically.\n\n**Results after 90 days:**\n- [X] subscribers\n- [Y] total views\n- Monetization: [status]\n\nThe key insight: consistency beats quality at the Shorts stage. Daily posting compounds.\n\nAMA about the setup."
+    },
+    {
+        "subreddit": "r/EntrepreneurRideAlong",
+        "title": "Month [X] update: building a YouTube automation SaaS in public",
+        "body": "**FinanceFlow — Monthly Update**\n\n**What it does:** Automatically generates and uploads finance YouTube Shorts using AI\n\n**This month's numbers:**\n- Users: [X]\n- MRR: $[Y]\n- Videos generated: [Z]\n- Channels on autopilot: [N]\n\n**What worked:**\n- [specific growth tactic]\n- [feature that users loved]\n\n**What didn't:**\n- [honest failure]\n\n**Next month focus:**\n- [goal 1]\n- [goal 2]\n\nBuilding in public thread — ask me anything.\n\nProduct: [your Railway URL]"
+    }
+]
+
+
+@app.route("/api/admin/reddit-templates")
+@admin_required
+def get_reddit_templates():
+    return jsonify(REDDIT_TEMPLATES)
+
+
+@app.route("/api/admin/system-channel", methods=["POST"])
+@admin_required
+def set_system_channel():
+    data = request.get_json() or {}
+    channel_id = data.get("channel_id", "").strip()
+    db = get_db()
+    try:
+        existing = db.execute(
+            "SELECT id FROM system_settings WHERE key='system_channel_id'").fetchone()
+        if existing:
+            db.execute(
+                "UPDATE system_settings SET value=? WHERE key='system_channel_id'", (channel_id,))
+        else:
+            db.execute(
+                "INSERT INTO system_settings (key, value) VALUES ('system_channel_id',?)", (channel_id,))
+        db.commit()
+        return jsonify({"status": "saved"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Static file serving ─────────────────────────────────────────────────
 
 

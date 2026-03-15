@@ -123,6 +123,7 @@ select.ps:focus{border-color:var(--g)}
     <button class="tab" onclick="showTab('payments',this)">💳 Payments<span id="pay-badge" style="display:none;background:rgba(245,158,11,0.2);color:#f59e0b;font-size:9px;padding:1px 5px;border-radius:100px;margin-left:5px;font-weight:700">0</span></button>
     <button class="tab" onclick="showTab('promotions',this)">📢 Promotions</button>
     <button class="tab" onclick="showTab('system',this)">⚙️ System</button>
+    <button class="tab" onclick="showTab('growth',this)">🚀 Growth Engine</button>
   </div>
   <div class="nav-r">
     <div class="wdot {% if stats.get('worker_online') %}on{% else %}off{% endif %}" id="wdot">
@@ -430,6 +431,55 @@ select.ps:focus{border-color:var(--g)}
   </div>
 </div>
 
+<!-- ══ GROWTH ENGINE ══ -->
+<div id="page-growth" class="page">
+
+  <!-- System Channel (FinanceFlow's own channel) -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="ch"><div class="cht">📺 System Channel (FinanceFlow Autopilot)</div></div>
+    <div style="padding:18px">
+      <p style="font-size:13px;color:var(--mt);margin-bottom:14px">Set the channel ID that FinanceFlow uses to auto-post daily promotional videos about the platform. The worker will queue one <code style="background:var(--dark);padding:2px 6px;border-radius:4px;font-size:11px">financeflow_promo</code> Short every 20 hours.</p>
+      <div style="display:flex;gap:10px;align-items:flex-end;max-width:480px">
+        <div style="flex:1">
+          <label style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px">Channel DB ID</label>
+          <input id="sys-ch-id" type="number" placeholder="e.g. 3" style="width:100%;padding:8px 11px;background:var(--dark);border:1px solid var(--bd);border-radius:7px;color:var(--text);font-size:13px;outline:none;font-family:'Space Mono',monospace">
+        </div>
+        <button class="btn bg" onclick="saveSystemChannel()">Save</button>
+      </div>
+      <p style="font-size:11px;color:var(--mt);margin-top:8px">Find the channel ID in the Channels tab (leftmost column). Leave blank to disable system channel autopilot.</p>
+    </div>
+  </div>
+
+  <!-- Auto-Twitter status -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="ch"><div class="cht">🐦 Auto-Twitter After Every Upload</div><span id="autopost-badge" class="pl" style="background:rgba(34,197,94,0.1);color:var(--grn)">Active</span></div>
+    <div style="padding:18px">
+      <p style="font-size:13px;color:var(--mt);margin-bottom:14px">Whenever any user uploads a video, the worker automatically posts a promotional tweet from the system Twitter account. Requires <code style="background:var(--dark);padding:2px 6px;border-radius:4px;font-size:11px">TWITTER_BEARER_TOKEN</code> + OAuth keys set in Social Keys.</p>
+      <div style="background:var(--dark);border:1px solid var(--bd);border-radius:8px;padding:14px;font-size:12px;font-family:'Space Mono',monospace;color:var(--g);line-height:1.9">
+        🚀 Another creator just automated their YouTube channel with FinanceFlow!<br><br>
+        [video URL]<br><br>
+        #YouTubeAutomation #AIContent #FinanceFlow #PassiveIncome
+      </div>
+      <p style="font-size:11px;color:var(--mt);margin-top:10px">Tweet text is hardcoded in worker.py → <code style="background:var(--dark);padding:2px 5px;border-radius:4px">cross_post_social()</code>. Edit there to change copy.</p>
+    </div>
+  </div>
+
+  <!-- Reddit templates -->
+  <div class="card">
+    <div class="ch">
+      <div class="cht">📋 Reddit Post Templates</div>
+      <button class="btn bo bsm" onclick="loadRedditTemplates()">🔄 Load Templates</button>
+    </div>
+    <div style="padding:18px">
+      <p style="font-size:13px;color:var(--mt);margin-bottom:16px">Pre-written posts for manual submission. Reddit's API requires app approval for automated posting, so copy-paste these manually. Replace <code style="background:var(--dark);padding:2px 6px;border-radius:4px;font-size:11px">[your Railway URL]</code> and bracketed placeholders before posting.</p>
+      <div id="reddit-templates-list">
+        <div class="em"><div class="em-i">📋</div>Click "Load Templates" to show posts</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <div class="ts" id="toast"></div>
 
 <script>
@@ -441,6 +491,7 @@ function showTab(n,el){
   if(el)el.classList.add('on');
   if(n==='payments')loadPayments();
   if(n==='promotions')loadPromotions();
+  if(n==='growth')loadRedditTemplates();
 }
 function toast(msg,t='ok'){const e=document.getElementById('toast');e.textContent=msg;e.className='ts '+t+' show';setTimeout(()=>e.classList.remove('show'),4000);}
 
@@ -562,6 +613,44 @@ async function adminMarkMonetized(cid,monetized){
   const d=await r.json();
   if(!d.success)toast(d.error||'Failed','er');
   else toast(monetized?'Marked monetized ✅':'Marked not monetized');
+}
+
+async function saveSystemChannel(){
+  const cid=document.getElementById('sys-ch-id').value.trim();
+  const r=await fetch('/api/admin/system-channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel_id:cid})});
+  const d=await r.json();
+  if(d.status)toast('✅ System channel saved!');else toast(d.error||'Save failed','er');
+}
+
+async function loadRedditTemplates(){
+  const el=document.getElementById('reddit-templates-list');
+  el.innerHTML='<div class="em"><div class="em-i">⏳</div>Loading...</div>';
+  try{
+    const r=await fetch('/api/admin/reddit-templates');const d=await r.json();
+    if(!d.length){el.innerHTML='<div class="em">No templates</div>';return;}
+    el.innerHTML=d.map((t,i)=>`
+      <div style="background:var(--dark);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-size:12px;font-weight:700;color:var(--g)">${t.subreddit}</span>
+          <button class="btn bo bsm" onclick="copyText('rt-title-${i}','Title copied!')">📋 Copy Title</button>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px" id="rt-title-${i}">${t.title}</div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+          <button class="btn bo bsm" onclick="copyText('rt-body-${i}','Body copied!')">📋 Copy Body</button>
+        </div>
+        <div style="font-size:11px;color:var(--mt);font-family:'Space Mono',monospace;white-space:pre-wrap;background:rgba(255,255,255,0.02);border:1px solid var(--bd);border-radius:7px;padding:12px;line-height:1.7;max-height:220px;overflow-y:auto" id="rt-body-${i}">${t.body}</div>
+      </div>
+    `).join('');
+  }catch(e){el.innerHTML='<div class="em" style="color:var(--red)">Failed to load</div>';}
+}
+
+function copyText(elId,msg){
+  const el=document.getElementById(elId);
+  if(!el)return;
+  navigator.clipboard.writeText(el.innerText||el.textContent).then(()=>toast('✅ '+msg)).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=el.innerText||el.textContent;
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✅ '+msg);
+  });
 }
 
 // Auto-refresh stats
