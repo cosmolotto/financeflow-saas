@@ -515,6 +515,63 @@ async function doReset() {
 }
 {% endif %}
 
+// ── Password Reset ───────────────────────────────────────────────────────
+{% if show_reset %}
+window.addEventListener('DOMContentLoaded', function() {
+  var token = new URLSearchParams(window.location.search).get('token') || '{{ reset_token }}';
+  // Hide all normal forms and tabs
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('forgotForm').style.display = 'none';
+  document.querySelector('.form-tabs').style.display = 'none';
+  document.getElementById('modalTitle').textContent = 'Set New Password';
+  document.getElementById('modalSub').textContent = 'Enter a new password for your account.';
+  // Inject reset form
+  document.getElementById('authModal').querySelector('.modal').insertAdjacentHTML('beforeend',
+    '<div id="resetForm">' +
+    '  <div class="form-group"><label>New Password</label>' +
+    '    <input type="password" id="resetNewPw" placeholder="At least 6 characters" autocomplete="new-password">' +
+    '  </div>' +
+    '  <div class="error-msg" id="resetError"></div>' +
+    '  <div id="resetSuccess" style="display:none;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:12px;margin-top:12px;color:#10b981;font-size:14px"></div>' +
+    '  <button class="btn btn-gold" style="width:100%;padding:14px;font-size:16px;margin-top:16px;border:none;cursor:pointer" onclick="doReset(\'' + token + '\')">Set New Password →</button>' +
+    '  <div style="text-align:center;margin-top:14px"><a href="/" style="color:#6b7280;font-size:13px;text-decoration:none">← Back to home</a></div>' +
+    '</div>'
+  );
+  // Open modal
+  document.getElementById('authModal').classList.add('active');
+  document.body.style.overflow = 'hidden';
+});
+async function doReset(token) {
+  var pw = document.getElementById('resetNewPw').value;
+  var err = document.getElementById('resetError');
+  var ok = document.getElementById('resetSuccess');
+  err.style.display = 'none'; ok.style.display = 'none';
+  if (!pw || pw.length < 6) { err.textContent = 'Password must be 6+ characters'; err.style.display = 'block'; return; }
+  try {
+    var r = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token: token, password: pw})
+    });
+    var d = await r.json();
+    if (d.error) { err.textContent = d.error; err.style.display = 'block'; }
+    else {
+      ok.textContent = '✅ Password updated! Redirecting to login…';
+      ok.style.display = 'block';
+      document.getElementById('resetForm').querySelector('button').disabled = true;
+      setTimeout(function() {
+        document.querySelector('.form-tabs').style.display = 'flex';
+        document.getElementById('resetForm').remove();
+        document.getElementById('modalTitle').textContent = 'Welcome back';
+        document.getElementById('modalSub').textContent = 'Log in with your new password.';
+        switchTab('login');
+      }, 1800);
+    }
+  } catch(e) { err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block'; }
+}
+{% endif %}
+
 function showForgot() {
   document.getElementById('loginForm').style.display = 'none';
   document.getElementById('forgotForm').style.display = 'block';
