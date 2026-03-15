@@ -969,7 +969,18 @@ def dashboard():
         "total_referrals": ref_count,
     }
 
-    channels = [dict(r) for r in db.execute(
+    def _str_dates(rows):
+        """Convert any datetime/date objects to strings (PostgreSQL returns them as objects)."""
+        result = []
+        for r in rows:
+            d = dict(r)
+            for k, v in d.items():
+                if v is not None and not isinstance(v, (str, int, float, bool)):
+                    d[k] = str(v)
+            result.append(d)
+        return result
+
+    channels = _str_dates(db.execute(
         "SELECT id, channel_name, youtube_channel_id AS channel_id, niche, "
         "video_type AS voice_style, schedule AS upload_schedule, videos_uploaded, "
         "COALESCE(autopilot,0) AS autopilot, COALESCE(monetized,0) AS monetized, "
@@ -979,22 +990,22 @@ def dashboard():
         "COALESCE(profile_picture_url,'') AS profile_picture_url "
         "FROM channels WHERE user_id=? AND active=1 ORDER BY created_at DESC",
         (u["id"],)
-    ).fetchall()]
+    ).fetchall())
 
-    queue = [dict(r) for r in db.execute(
+    queue = _str_dates(db.execute(
         "SELECT q.*, c.channel_name FROM queue q "
         "LEFT JOIN channels c ON q.channel_id=c.id "
         "WHERE q.user_id=? AND q.status IN ('pending','processing') "
         "ORDER BY q.created_at DESC LIMIT 20",
         (u["id"],)
-    ).fetchall()]
+    ).fetchall())
 
-    videos = [dict(r) for r in db.execute(
+    videos = _str_dates(db.execute(
         "SELECT v.*, c.channel_name FROM videos v "
         "LEFT JOIN channels c ON v.channel_id=c.id "
         "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50",
         (u["id"],)
-    ).fetchall()]
+    ).fetchall())
 
     social = {}
     for row in db.execute(
