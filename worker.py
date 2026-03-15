@@ -9,10 +9,23 @@ import hmac, hashlib, base64, secrets, urllib.parse, urllib.request, shutil
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-DB    = "financeflow.db"
-OUT   = Path("generated_videos")
-HBEAT = "worker_heartbeat.txt"
+# ── Paths: always relative to this script, not CWD ──────────────────────
+_HERE  = Path(__file__).parent.resolve()
+DB     = str(_HERE / "financeflow.db")
+OUT    = _HERE / "generated_videos"
+HBEAT  = str(_HERE / "worker_heartbeat.txt")
 OUT.mkdir(exist_ok=True)
+
+# ── PostgreSQL support (Railway production) ──────────────────────────────
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+_HAS_PG = False
+if DATABASE_URL:
+    try:
+        import psycopg2, psycopg2.extras
+        _HAS_PG = True
+    except ImportError:
+        print("[WARN] DATABASE_URL set but psycopg2 not installed — falling back to SQLite")
+        DATABASE_URL = ""
 
 CLIENT_ID       = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET   = os.environ.get("GOOGLE_CLIENT_SECRET", "")
@@ -67,7 +80,32 @@ SCRIPTS = {
 }
 
 def get_db():
-    db=sqlite3.connect(DB); db.row_factory=sqlite3.Row; return db
+    if _HAS_PG and DATABASE_URL:
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.DictCursor)
+        conn.autocommit = False
+        return conn
+    db = sqlite3.connect(DB)
+    db.row_factory = sqlite3.Row
+    return db
+
+def _db_exec(db, sql, params=()):
+    """Execute a query that works on both SQLite and PostgreSQL."""
+    if _HAS_PG and DATABASE_URL:
+        sql = sql.replace("?", "%s")
+    cur = db.cursor() if _HAS_PG and DATABASE_URL else db
+    if params:
+        cur.execute(sql, params)
+    else:
+        cur.execute(sql)
+    return cur
+
+def _fetchone(db, sql, params=()):
+    cur = _db_exec(db, sql, params)
+    return cur.fetchone()
+
+def _fetchall(db, sql, params=()):
+    cur = _db_exec(db, sql, params)
+    return cur.fetchall()
 
 def refresh_yt_token(rt):
     data=urllib.parse.urlencode({"refresh_token":rt,"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET,"grant_type":"refresh_token"}).encode()
@@ -464,32 +502,69 @@ if __name__=="__main__":
     print("  FinanceFlow Worker — Launch Version")
     print("  Polls queue every 10s | Ctrl+C to stop")
     print("==============================================")
+    print(f"DB: {DB}")
+    print(f"PG: {'YES — ' + DATABASE_URL[:40] + '...' if _HAS_PG and DATABASE_URL else 'NO — using SQLite'}")
     if not FFMPEG:
         print("[WARN] ffmpeg not found in PATH — moviepy fallback will be used for rendering")
     else:
         print(f"ffmpeg: {FFMPEG}")
     try: from PIL import Image; print("Pillow: ready")
     except: print("ERROR: pip3 install Pillow --break-system-packages"); sys.exit(1)
-    print(f"DB: {DB} | Output: {OUT}\n")
+    print(f"Output dir: {OUT}\n")
+
+    # ── Reset any jobs stuck in 'processing' from a previous crash ───────
+    try:
+        db = get_db()
+        stuck = _fetchone(db, "SELECT COUNT(*) FROM queue WHERE status='processing'")[0]
+        if stuck:
+            print(f"[STARTUP] Found {stuck} job(s) stuck in 'processing' — resetting to 'pending'")
+            _db_exec(db, "UPDATE queue SET status='pending', progress='Requeued after worker restart' WHERE status='processing'")
+            db.commit()
+        else:
+            print("[STARTUP] No stuck jobs found")
+        total_pending = _fetchone(db, "SELECT COUNT(*) FROM queue WHERE status='pending'")[0]
+        total_all     = _fetchone(db, "SELECT COUNT(*) FROM queue")[0]
+        print(f"[STARTUP] Queue: {total_pending} pending, {total_all} total rows")
+        db.close()
+    except Exception as e:
+        print(f"[STARTUP] DB check failed: {e}")
+
     idle_count = 0
     while True:
         try:
-            with open(HBEAT,"w") as f: f.write(str(time.time()))
-            db=get_db()
-            job=db.execute("SELECT * FROM queue WHERE status='pending' ORDER BY created_at ASC LIMIT 1").fetchone()
+            with open(HBEAT, "w") as f:
+                f.write(str(time.time()))
+            db = get_db()
+
+            # ── Debug: show live queue snapshot every poll ────────────────
+            n_pending    = _fetchone(db, "SELECT COUNT(*) FROM queue WHERE status='pending'")[0]
+            n_processing = _fetchone(db, "SELECT COUNT(*) FROM queue WHERE status='processing'")[0]
+            n_done       = _fetchone(db, "SELECT COUNT(*) FROM queue WHERE status='done'")[0]
+            n_failed     = _fetchone(db, "SELECT COUNT(*) FROM queue WHERE status='failed'")[0]
+            ts = time.strftime('%H:%M:%S')
+
+            job = _fetchone(db, "SELECT * FROM queue WHERE status='pending' ORDER BY created_at ASC LIMIT 1")
             db.close()
+
             if job:
                 idle_count = 0
+                print(f"[{ts}] Poll: pending={n_pending} processing={n_processing} done={n_done} failed={n_failed}")
+                print(f"[{ts}] ▶ Picked job id={job['id']} | niche={job['niche']} | type={job['video_type']} | channel_id={job['channel_id']} | user_id={job['user_id']}")
                 process(job)
             else:
                 idle_count += 1
-                print(f"[{time.strftime('%H:%M:%S')}] Watching queue...",end='\r',flush=True)
+                print(f"[{ts}] Poll: pending={n_pending} processing={n_processing} done={n_done} failed={n_failed} | idle #{idle_count}")
                 # Check autopilot every 6 idle cycles (~60s)
                 if idle_count % 6 == 0:
                     n = check_autopilot()
-                    if n: print(f"\n[AUTOPILOT] {n} job(s) queued")
+                    if n:
+                        print(f"[{ts}] [AUTOPILOT] {n} job(s) queued")
+
         except KeyboardInterrupt:
-            print("\nWorker stopped."); break
+            print("\nWorker stopped.")
+            break
         except Exception as e:
-            print(f"\nWorker error: {e}")
+            import traceback
+            print(f"\n[{time.strftime('%H:%M:%S')}] Worker error: {e}")
+            traceback.print_exc()
         time.sleep(10)
