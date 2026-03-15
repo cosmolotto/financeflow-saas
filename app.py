@@ -924,9 +924,13 @@ def dashboard():
     plan_key = u["plan"] or "starter"
     plan_data = dict(PLANS.get(plan_key, PLANS["starter"]))
     if is_admin:
-        pass
-        plan_data.update({"channels": 9999, "videos_per_week": 9999,
-                          "custom_prompts": True, "social_posting": True})
+        plan_key = "agency"
+        plan_data = dict(PLANS.get("agency", PLANS["starter"]))
+        plan_data.update({
+            "channels": 9999, "videos_per_week": 9999,
+            "custom_prompts": True, "social_posting": True,
+            "prompt_library": True, "api_access": True,
+        })
 
     trial_ends = int(u["trial_ends_at"] or 0)
     trial_active = trial_ends > int(time.time())
@@ -948,7 +952,7 @@ def dashboard():
         "name": u["full_name"] or u["email"],
         "plan": plan_key,
         "api_key": hashlib.md5(f"ff-{u['id']}".encode()).hexdigest(),
-        "is_founding": bool(u["is_founding_member"]),
+        "is_founding": bool(u["is_founding_member"]) or is_admin,
         "is_first_user": u["id"] == 1,
         "trial_active": trial_active,
         "trial_days_left": trial_days_left,

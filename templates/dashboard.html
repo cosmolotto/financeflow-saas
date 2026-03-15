@@ -485,23 +485,32 @@ tr:hover td{background:rgba(255,255,255,0.01)}
       <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:5px">Plans & Billing</div>
       <div style="color:var(--muted);margin-bottom:22px">Current: <strong style="color:var(--gold)">{{ plan.name }}</strong>{% if is_admin %} (you get everything free forever 🎉){% endif %}</div>
       <div class="bg2">
-        <div class="pk {% if user.plan=='starter' %}cur{% endif %}">{% if user.plan=='starter' and not is_admin %}<div class="pbadge">CURRENT</div>{% endif %}
+        {% if is_admin %}
+        <div class="pk cur" style="grid-column:1/-1;text-align:center;padding:28px">
+          <div class="pbadge">ADMIN — UNLIMITED ACCESS</div>
+          <div class="pkn" style="font-size:22px;margin-top:10px">👑 Full Agency</div>
+          <div style="color:var(--muted);margin-top:6px">Unlimited channels · Unlimited videos · All features enabled</div>
+        </div>
+        {% else %}
+        <div class="pk {% if user.plan=='starter' %}cur{% endif %}">{% if user.plan=='starter' %}<div class="pbadge">CURRENT</div>{% endif %}
           <div class="pkn">Starter</div><div class="pkp">$0<span>/mo</span></div><div class="pkd">Free forever</div>
           <ul class="pkf"><li>1 channel</li><li>3 videos/week</li><li>AI voice + thumbnails</li><li class="no">Custom prompts</li><li class="no">Social posting</li><li class="no">Prompt library</li></ul>
-          <button class="btn {% if user.plan=='starter' or is_admin %}bo{% else %}bg{% endif %}" style="width:100%;justify-content:center" onclick="upgrade('starter')">{% if user.plan=='starter' or is_admin %}Free Plan{% else %}Downgrade{% endif %}</button>
+          <button class="btn {% if user.plan=='starter' %}bo{% else %}bg{% endif %}" style="width:100%;justify-content:center" onclick="upgrade('starter')">{% if user.plan=='starter' %}Free Plan{% else %}Downgrade{% endif %}</button>
         </div>
-        <div class="pk ft {% if user.plan=='pro' %}cur{% endif %}">{% if user.plan!='pro' or is_admin %}<div class="pbadge">MOST POPULAR</div>{% else %}<div class="pbadge">CURRENT</div>{% endif %}
+        <div class="pk ft {% if user.plan=='pro' %}cur{% endif %}">{% if user.plan!='pro' %}<div class="pbadge">MOST POPULAR</div>{% else %}<div class="pbadge">CURRENT</div>{% endif %}
           <div class="pkn">Pro</div><div class="pkp">$29<span>/mo</span></div><div class="pkd">For serious creators</div>
           <ul class="pkf"><li>3 channels</li><li>14 videos/week</li><li>AI voice + thumbnails</li><li>✨ Custom prompts</li><li>🌐 Social posting</li><li>💡 Prompt library</li></ul>
-          <button class="btn bg" style="width:100%;justify-content:center" onclick="upgrade('pro')">{% if user.plan=='pro' and not is_admin %}Current Plan{% else %}Upgrade to Pro{% endif %}</button>
+          <button class="btn bg" style="width:100%;justify-content:center" onclick="upgrade('pro')">{% if user.plan=='pro' %}Current Plan{% else %}Upgrade to Pro{% endif %}</button>
         </div>
-        <div class="pk {% if user.plan=='agency' %}cur{% endif %}">{% if user.plan=='agency' and not is_admin %}<div class="pbadge">CURRENT</div>{% endif %}
+        <div class="pk {% if user.plan=='agency' %}cur{% endif %}">{% if user.plan=='agency' %}<div class="pbadge">CURRENT</div>{% endif %}
           <div class="pkn">Agency</div><div class="pkp">$99<span>/mo</span></div><div class="pkd">Scale to 10 channels</div>
           <ul class="pkf"><li>10 channels</li><li>Unlimited videos</li><li>AI voice + thumbnails</li><li>✨ Custom prompts</li><li>🌐 Social posting</li><li>💡 Prompt library + API</li></ul>
-          <button class="btn {% if user.plan=='agency' and not is_admin %}bo{% else %}bg{% endif %}" style="width:100%;justify-content:center" onclick="upgrade('agency')">{% if user.plan=='agency' and not is_admin %}Current Plan{% else %}Get Agency{% endif %}</button>
+          <button class="btn {% if user.plan=='agency' %}bo{% else %}bg{% endif %}" style="width:100%;justify-content:center" onclick="upgrade('agency')">{% if user.plan=='agency' %}Current Plan{% else %}Get Agency{% endif %}</button>
         </div>
+        {% endif %}
       </div>
-      <!-- Growth Plan -->
+      <!-- Growth Plan (non-admin only) -->
+      {% if not is_admin %}
       <div style="margin-top:18px;background:linear-gradient(135deg,rgba(255,215,0,0.05),rgba(255,140,0,0.05));border:1px solid rgba(255,215,0,0.25);border-radius:13px;padding:22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:3px">🚀 Until Monetized Plan <span style="background:rgba(255,215,0,0.2);color:var(--gold);font-size:11px;padding:2px 9px;border-radius:100px">NEW</span></div>
@@ -512,6 +521,7 @@ tr:hover td{background:rgba(255,255,255,0.01)}
           <button class="btn bg" onclick="upgrade('growth')" style="margin-top:8px;padding:10px 22px">Get Growth Plan →</button>
         </div>
       </div>
+      {% endif %}
 
       <!-- Payment History -->
       <div style="margin-top:28px">
