@@ -175,7 +175,7 @@ if HAS_CELERY and REDIS_URL:
     print(f"[CELERY] Connected to Redis: {REDIS_URL[:40]}...")
 else:
     pass
-    print("[QUEUE] Using SQLite queue (no REDIS_URL set)")
+    print("[QUEUE] No REDIS_URL — using SQLite/PostgreSQL queue (worker.py polls DB)")
 
 # ── Rate limiting (optional) ────────────────────────────────────────────
 if HAS_LIMITER:
@@ -2942,6 +2942,11 @@ def _trial_expiry_worker():
             print(f"[TRIAL EXPIRY] Error: {e}")
         time.sleep(3600)
 
+
+if DATABASE_URL and HAS_PG:
+    print(f"[DB] Using PostgreSQL — {DATABASE_URL[:40]}...")
+else:
+    print(f"[DB] Using SQLite — {DB}")
 
 init_db()
 
