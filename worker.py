@@ -100,11 +100,13 @@ def _db_exec(db, sql, params=()):
     return cur
 
 def _fetchone(db, sql, params=()):
-    cur = _db_exec(db, sql, params)
+    cur = db.cursor()
+    cur.execute(sql, params)
     return cur.fetchone()
 
 def _fetchall(db, sql, params=()):
-    cur = _db_exec(db, sql, params)
+    cur = db.cursor()
+    cur.execute(sql, params)
     return cur.fetchall()
 
 def refresh_yt_token(rt):
