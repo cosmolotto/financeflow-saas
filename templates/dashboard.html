@@ -340,12 +340,33 @@ tr:hover td{background:rgba(255,255,255,0.01)}
 
     <!-- ══ GENERATE ══ -->
     <div id="page-generate" style="display:none">
-      <div style="max-width:540px">
+      <div style="max-width:600px">
         <div style="margin-bottom:20px"><div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:5px">⚡ Generate New Video</div><div style="color:var(--muted)">Build and auto-upload to YouTube + all your social media.</div></div>
         {% if not channels %}<div class="al aer">⚠️ No channels connected. <button class="btn bg xs" style="margin-left:8px" onclick="connectCh()">Connect Channel</button></div>
         {% else %}
+
+        <!-- Tab selector -->
+        <div style="display:flex;gap:0;margin-bottom:18px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <button id="tab-ai" onclick="switchGenTab('ai')" style="flex:1;padding:10px;background:var(--gold);color:#000;border:none;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px">🤖 AI Generate</button>
+          <button id="tab-upload" onclick="switchGenTab('upload')" style="flex:1;padding:10px;background:transparent;color:var(--muted);border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px">📤 Upload Your Video</button>
+        </div>
+
+        <!-- AI Generate Tab -->
+        <div id="gen-ai-tab">
         <div class="card" style="padding:20px">
-          <div class="fd"><label>Channel</label><select id="gen-ch">{% for ch in channels %}<option value="{{ ch.id }}">{{ ch.channel_name }}</option>{% endfor %}</select></div>
+          <!-- Multi-channel selector -->
+          <div class="fd">
+            <label>Channels <span style="color:var(--muted);font-weight:400;font-size:10px">(select multiple to post to all at once)</span></label>
+            <div id="gen-ch-list" style="display:flex;flex-direction:column;gap:6px">
+              {% for ch in channels %}
+              <label style="display:flex;align-items:center;gap:9px;background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:8px 11px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='rgba(255,215,0,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+                <input type="checkbox" class="gen-ch-cb" value="{{ ch.id }}" {% if loop.first %}checked{% endif %} style="width:15px;height:15px;accent-color:var(--gold);flex-shrink:0">
+                <span style="font-size:13px;font-weight:600">{{ ch.channel_name }}</span>
+                <span class="tg" style="margin-left:auto">{{ ch.niche.replace('_',' ').title() }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
           <div class="fd"><label>Video Type</label><select id="gen-type"><option value="short">📱 YouTube Short (60s) — Best for growth</option><option value="long">🎬 Long-form (~8 min)</option></select></div>
           {% if plan.custom_prompts %}
           <div class="fd"><label>Custom Title <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="text" id="gen-title" placeholder="Leave blank for AI"></div>
@@ -358,13 +379,57 @@ tr:hover td{background:rgba(255,255,255,0.01)}
           {% else %}
           <div class="gate"><div class="gate-t">✨ Control your video topics with Pro</div><p>Write custom prompts for every video. Upgrade to unlock.</p><button class="btn bg sm" style="margin-top:9px" onclick="sp('billing')">Upgrade to Pro — $29/mo →</button></div>
           {% endif %}
-          <button class="btn bg" style="width:100%;justify-content:center;padding:13px;font-size:15px" onclick="doGen()">⚡ Generate & Upload Everywhere</button>
+          <button class="btn bg" style="width:100%;justify-content:center;padding:13px;font-size:15px" onclick="doGen()">⚡ Generate & Upload to Selected Channels</button>
           <div id="gen-msg" style="margin-top:11px;font-size:13px;display:none"></div>
         </div>
-        <div style="background:rgba(255,215,0,0.03);border:1px solid rgba(255,215,0,0.1);border-radius:11px;padding:14px;font-size:13px;color:var(--muted)">
+        </div>
+
+        <!-- Upload Your Video Tab -->
+        <div id="gen-upload-tab" style="display:none">
+        <div class="card" style="padding:20px">
+          <div class="fd">
+            <label>Select Channels <span style="color:var(--muted);font-weight:400;font-size:10px">(one upload → multiple channels)</span></label>
+            <div id="up-ch-list" style="display:flex;flex-direction:column;gap:6px">
+              {% for ch in channels %}
+              <label style="display:flex;align-items:center;gap:9px;background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:8px 11px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='rgba(255,215,0,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+                <input type="checkbox" class="up-ch-cb" value="{{ ch.id }}" {% if loop.first %}checked{% endif %} style="width:15px;height:15px;accent-color:var(--gold);flex-shrink:0">
+                <span style="font-size:13px;font-weight:600">{{ ch.channel_name }}</span>
+                <span class="tg" style="margin-left:auto">{{ ch.niche.replace('_',' ').title() }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="fd">
+            <label>Video Title</label>
+            <input type="text" id="up-title" placeholder="Enter your video title">
+          </div>
+          <div class="fd">
+            <label>Video File <span style="color:var(--muted);font-weight:400">(MP4, MOV, AVI, WEBM)</span></label>
+            <div id="up-drop" onclick="document.getElementById('up-file').click()" style="border:2px dashed var(--border);border-radius:9px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(255,215,0,0.4)'" onmouseout="this.style.borderColor='var(--border)'" ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondrop="handleDrop(event)">
+              <div style="font-size:32px;margin-bottom:8px">📁</div>
+              <div style="font-weight:600;margin-bottom:4px" id="up-fname">Click or drag video here</div>
+              <div style="font-size:12px;color:var(--muted)">MP4, MOV, AVI, WEBM · Max 2GB</div>
+            </div>
+            <input type="file" id="up-file" accept=".mp4,.mov,.avi,.webm,video/*" style="display:none" onchange="fileSelected(this)">
+          </div>
+          <!-- Upload progress bar -->
+          <div id="up-progress-wrap" style="display:none;margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px">
+              <span>Uploading...</span><span id="up-pct">0%</span>
+            </div>
+            <div style="background:var(--border);border-radius:100px;height:6px;overflow:hidden">
+              <div id="up-bar" style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:100px;width:0%;transition:width 0.3s"></div>
+            </div>
+          </div>
+          <button class="btn bg" style="width:100%;justify-content:center;padding:13px;font-size:15px" id="up-btn" onclick="doUpload()">📤 Upload & Send to YouTube</button>
+          <div id="up-msg" style="margin-top:11px;font-size:13px;display:none"></div>
+        </div>
+        </div>
+
+        <div style="background:rgba(255,215,0,0.03);border:1px solid rgba(255,215,0,0.1);border-radius:11px;padding:14px;font-size:13px;color:var(--muted);margin-top:16px">
           <strong style="color:var(--text)">ℹ️ How it works</strong><br>
-          1. Click Generate → added to queue instantly<br>2. Worker builds voice, visuals, music<br>3. Uploads to YouTube automatically<br>4. Posts to all connected social media accounts<br>5. Takes 5–15 min · watch in Queue tab<br>
-          <strong style="color:var(--yellow);display:block;margin-top:6px">⚡ worker.py must be running in Terminal 2!</strong>
+          1. Generate or upload → added to queue instantly<br>2. Worker uploads to YouTube automatically<br>3. Posts to all connected social accounts<br>4. Check progress in Queue tab<br>
+          <strong style="color:var(--yellow);display:block;margin-top:6px">⚡ worker.py must be running to process jobs!</strong>
         </div>
         {% endif %}
       </div>
@@ -815,14 +880,68 @@ async function submitGM(){
   cAll();const r=await fetch('/api/videos/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel_id:ch,type,custom_prompt:prompt,custom_title:title})});
   const d=await r.json();if(d.success){toast(d.message,'ok');sp('queue');setTimeout(poll,500);}else toast(d.error,'er');
 }
+function switchGenTab(t){
+  document.getElementById('gen-ai-tab').style.display=t==='ai'?'':'none';
+  document.getElementById('gen-upload-tab').style.display=t==='upload'?'':'none';
+  document.getElementById('tab-ai').style.background=t==='ai'?'var(--gold)':'transparent';
+  document.getElementById('tab-ai').style.color=t==='ai'?'#000':'var(--muted)';
+  document.getElementById('tab-upload').style.background=t==='upload'?'var(--gold)':'transparent';
+  document.getElementById('tab-upload').style.color=t==='upload'?'#000':'var(--muted)';
+}
 async function doGen(){
-  const ch=document.getElementById('gen-ch')?.value;const type=document.getElementById('gen-type')?.value||'short';
-  const prompt=IS_PRO?(document.getElementById('gen-prompt')?.value||''):'';const title=IS_PRO?(document.getElementById('gen-title')?.value||''):'';
-  const msg=document.getElementById('gen-msg');if(!ch){toast('Select a channel first','er');return;}
-  const r=await fetch('/api/videos/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel_id:ch,type,custom_prompt:prompt,custom_title:title})});
+  const cbs=document.querySelectorAll('.gen-ch-cb:checked');
+  const channel_ids=Array.from(cbs).map(c=>parseInt(c.value));
+  const type=document.getElementById('gen-type')?.value||'short';
+  const prompt=IS_PRO?(document.getElementById('gen-prompt')?.value||''):'';
+  const title=IS_PRO?(document.getElementById('gen-title')?.value||''):'';
+  const msg=document.getElementById('gen-msg');
+  if(!channel_ids.length){toast('Select at least one channel','er');return;}
+  msg.style.display='none';
+  const r=await fetch('/api/videos/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel_ids,video_type:type,custom_prompt:prompt,custom_title:title})});
   const d=await r.json();
-  if(d.success){msg.style.display='block';msg.style.color='var(--green)';msg.textContent=d.message;toast(d.message,'ok');setTimeout(()=>{sp('queue');poll();},1500);}
-  else{msg.style.display='block';msg.style.color='var(--red)';msg.textContent=d.error;toast(d.error,'er');}
+  if(d.success){
+    const n=d.job_ids?d.job_ids.length:1;
+    const txt=n>1?`Queued for ${n} channels!`:'Added to queue!';
+    msg.style.display='block';msg.style.color='var(--green)';msg.textContent=txt;
+    toast(txt,'ok');setTimeout(()=>{sp('queue');poll();},1500);
+  } else{msg.style.display='block';msg.style.color='var(--red)';msg.textContent=d.error;toast(d.error,'er');}
+}
+function fileSelected(inp){
+  const f=inp.files[0];if(!f)return;
+  document.getElementById('up-fname').textContent=f.name+' ('+Math.round(f.size/1024/1024)+'MB)';
+}
+function handleDrop(e){
+  e.preventDefault();e.currentTarget.style.borderColor='var(--border)';
+  const f=e.dataTransfer.files[0];if(!f)return;
+  document.getElementById('up-file').files=e.dataTransfer.files;
+  document.getElementById('up-fname').textContent=f.name+' ('+Math.round(f.size/1024/1024)+'MB)';
+}
+async function doUpload(){
+  const cbs=document.querySelectorAll('.up-ch-cb:checked');
+  const channel_ids=Array.from(cbs).map(c=>c.value);
+  const file=document.getElementById('up-file').files[0];
+  const title=document.getElementById('up-title').value.trim();
+  const msg=document.getElementById('up-msg');
+  if(!channel_ids.length){toast('Select at least one channel','er');return;}
+  if(!file){toast('Select a video file first','er');return;}
+  if(!title){toast('Enter a video title','er');return;}
+  const fd=new FormData();
+  fd.append('video',file);fd.append('channel_ids',channel_ids.join(','));fd.append('title',title);
+  document.getElementById('up-btn').disabled=true;
+  document.getElementById('up-progress-wrap').style.display='block';
+  msg.style.display='none';
+  const xhr=new XMLHttpRequest();
+  xhr.upload.onprogress=function(e){if(e.lengthComputable){const pct=Math.round(e.loaded/e.total*100);document.getElementById('up-bar').style.width=pct+'%';document.getElementById('up-pct').textContent=pct+'%';}};
+  xhr.onload=function(){
+    document.getElementById('up-btn').disabled=false;
+    try{const d=JSON.parse(xhr.responseText);
+      if(d.success){msg.style.display='block';msg.style.color='var(--green)';msg.textContent=`Queued for ${d.channels||1} channel(s)! Worker will upload to YouTube.`;toast('Upload queued!','ok');setTimeout(()=>{sp('queue');poll();},2000);}
+      else{msg.style.display='block';msg.style.color='var(--red)';msg.textContent=d.error||'Upload failed';toast(d.error,'er');}
+    }catch(err){msg.style.display='block';msg.style.color='var(--red)';msg.textContent='Upload failed';toast('Upload failed','er');}
+    document.getElementById('up-progress-wrap').style.display='none';
+  };
+  xhr.onerror=function(){document.getElementById('up-btn').disabled=false;toast('Network error','er');document.getElementById('up-progress-wrap').style.display='none';};
+  xhr.open('POST','/api/videos/upload-own');xhr.send(fd);
 }
 async function cancelJ(id){const r=await fetch('/api/queue/'+id+'/cancel',{method:'POST'});const d=await r.json();if(d.success){toast('Cancelled');poll();}}
 

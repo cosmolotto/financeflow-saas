@@ -46,11 +46,38 @@ def find_ffmpeg():
     return None
 FFMPEG = find_ffmpeg()
 
+_FONT_CACHE = {}
 def fnt(size):
-    for p in ["/System/Library/Fonts/Helvetica.ttc","/System/Library/Fonts/Supplemental/Impact.ttf","/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
-        try: return ImageFont.truetype(p, size)
+    if size in _FONT_CACHE:
+        return _FONT_CACHE[size]
+    for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+              "/System/Library/Fonts/Helvetica.ttc",
+              "/System/Library/Fonts/Supplemental/Impact.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"]:
+        try:
+            f = ImageFont.truetype(p, size)
+            _FONT_CACHE[size] = f
+            return f
         except: pass
-    return ImageFont.load_default()
+    f = ImageFont.load_default()
+    _FONT_CACHE[size] = f
+    return f
+
+# Per-niche visual themes
+NICHE_THEMES = {
+    "personal_finance": {"bg": (8, 8, 8),   "bg2": (25, 18, 4),  "grid": (35, 28, 8)},
+    "crypto":           {"bg": (5, 3, 18),  "bg2": (18, 8, 32),  "grid": (28, 15, 45)},
+    "real_estate":      {"bg": (4, 14, 4),  "bg2": (12, 28, 10), "grid": (12, 38, 12)},
+    "side_hustle":      {"bg": (14, 7, 3),  "bg2": (28, 14, 4),  "grid": (42, 22, 5)},
+    "financeflow_promo":{"bg": (4, 4, 18),  "bg2": (12, 10, 32), "grid": (22, 20, 48)},
+}
+NICHE_LABELS = {
+    "personal_finance": "FINANCE TIPS",
+    "crypto":           "CRYPTO TIPS",
+    "real_estate":      "REAL ESTATE TIPS",
+    "side_hustle":      "SIDE HUSTLE TIPS",
+    "financeflow_promo":"FINANCEFLOW AI",
+}
 
 SCRIPTS = {
 "personal_finance": [
@@ -227,6 +254,8 @@ def make_frames(sd,dur,fdir,vtype):
     os.makedirs(fdir,exist_ok=True)
     W,H=(1080,1920) if vtype=="short" else (1920,1080)
     FPS=12; c,a=sd["color"],sd["accent"]; lines=sd["lines"]
+    niche=sd.get("niche","personal_finance")
+    theme=NICHE_THEMES.get(niche,{"bg":(8,8,8),"bg2":(25,18,4),"grid":(35,28,8)})
     nf=int(dur*FPS)
     # Cap frames to limit memory usage on Railway (512MB RAM)
     MAX_FRAMES = 300 if vtype=="short" else 500
@@ -238,23 +267,49 @@ def make_frames(sd,dur,fdir,vtype):
     for f in range(nf):
         t=f/FPS; li=min(int(t/cd),len(lines)-1)
         img=Image.new("RGB",(W,H)); draw=ImageDraw.Draw(img)
-        wp=math.sin(t*0.5)*0.15
-        for y in range(H):
-            draw.line([(0,y),(W,y)],fill=(max(0,min(255,c[0]+int((30+wp*20)*y/H))),max(0,min(255,c[1]+int((20+wp*10)*y/H))),max(0,min(255,c[2]+int((35+wp*30)*y/H)))))
+        # Animated gradient background with pulse
+        pulse=math.sin(t*0.8)*0.12+0.08
+        for y in range(0,H,2):
+            ratio=y/H
+            r=max(0,min(255,c[0]+int(ratio*45+pulse*25)))
+            g=max(0,min(255,c[1]+int(ratio*28+pulse*12)))
+            b=max(0,min(255,c[2]+int(ratio*55+pulse*35)))
+            draw.rectangle([(0,y),(W,y+1)],fill=(r,g,b))
+        # Subtle grid overlay for depth
+        gc=theme["grid"]
+        for gx in range(0,W,80): draw.line([(gx,0),(gx,H)],fill=(gc[0],gc[1],gc[2]))
+        for gy in range(0,H,80): draw.line([(0,gy),(W,gy)],fill=(gc[0],gc[1],gc[2]))
+        # Animated chart bars (finance chart motif)
+        n_bars=8; bar_total_w=int(W*0.78); bar_w=bar_total_w//n_bars-4
+        chart_bx=int(W*0.11); chart_by=int(H*0.84); chart_h=int(H*0.09)
+        for i in range(n_bars):
+            bh=int(chart_h*(0.25+0.65*abs(math.sin(t*0.4+i*0.7+i*0.15))))
+            bx=chart_bx+i*(bar_w+4)
+            bright=int(120+80*abs(math.sin(t*0.5+i*0.4)))
+            bc=(min(255,a[0]*bright//200),min(255,a[1]*bright//200),min(255,a[2]*bright//200))
+            draw.rectangle([bx,chart_by-bh,bx+bar_w,chart_by],fill=bc)
+        # Accent bars top/bottom
         draw.rectangle([0,0,W,8],fill=a); draw.rectangle([0,H-8,W,H],fill=a)
+        # Progress bar
         prog=int((t/dur)*(W-80)); draw.rectangle([40,H-6,40+max(prog,4),H-2],fill=a)
-        draw.text((W//2,44),"FINANCE CHANNEL",fill=a,font=fnt(32),anchor="mm")
-        draw.text((W//2,H-24),"Made with FinanceFlow.app",fill=(80,80,80),font=fnt(14),anchor="mm")
+        # Niche label
+        label=NICHE_LABELS.get(niche,"FINANCE CHANNEL")
+        draw.text((W//2,44),label,fill=a,font=fnt(32),anchor="mm")
+        draw.text((W//2,H-24),"FinanceFlow.app",fill=(70,70,70),font=fnt(14),anchor="mm")
+        # Main text with shadow + slide-in animation
         line=lines[li] if li<len(lines) else ""
         yoff=int((1-min(((t-li*cd)/cd)*5,1))*40)
-        tsz=int((82 if vtype=="short" else 68)*(1+0.03*math.sin(t*6)))
+        tsz=int((82 if vtype=="short" else 68)*(1+0.025*math.sin(t*5)))
+        # Drop shadow
+        draw.text((W//2+3,H//2+yoff+3),line,fill=(0,0,0),font=fnt(tsz),anchor="mm")
         draw.text((W//2,H//2+yoff),line,fill=a,font=fnt(tsz),anchor="mm")
+        # Fade in/out
         fade=int(FPS*0.2)
         if f<fade:
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,f/fade)
         elif f>nf-fade:
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,max(0,(nf-f)/fade))
-        img.save(f"{fdir}/f{f:06d}.jpg",quality=60)
+        img.save(f"{fdir}/f{f:06d}.jpg",quality=78)
     return FPS
 
 def make_thumb(sd,out,vtype):
@@ -275,8 +330,8 @@ def render_video(fdir,audio,out,fps):
 
     if FFMPEG:
         cmd=[FFMPEG,"-y","-threads","1","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
-             "-c:v","libx264","-preset","ultrafast","-crf","28","-pix_fmt","yuv420p",
-             "-c:a","aac","-b:a","128k","-shortest","-movflags","+faststart",out]
+             "-c:v","libx264","-preset","fast","-crf","18","-pix_fmt","yuv420p",
+             "-c:a","aac","-b:a","256k","-shortest","-movflags","+faststart",out]
         r=subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
             print(f"   [RENDER] ffmpeg exited {r.returncode}")
@@ -424,7 +479,7 @@ def script_from_prompt(prompt,title,niche):
         chunk.append(w)
         if len(" ".join(chunk))>13: lines.append(" ".join(chunk)); chunk=[]
     if chunk: lines.append(" ".join(chunk))
-    return {"title":out_title,"script":prompt,"color":c,"accent":a,"lines":lines[:10] or ["WATCH THIS","RIGHT NOW"]}
+    return {"title":out_title,"script":prompt,"color":c,"accent":a,"lines":lines[:10] or ["WATCH THIS","RIGHT NOW"],"niche":niche}
 
 def process(job):
     db=get_db(); jid=job["id"]; uid=job["user_id"]; cid=job["channel_id"]
@@ -448,15 +503,47 @@ def process(job):
         db.commit(); db.close()
 
     try:
+        # ── Custom upload: skip generation, go straight to YouTube ─────────
+        try:
+            video_file_path = job["video_file_path"]
+        except (KeyError, IndexError, TypeError):
+            video_file_path = None
+
+        if vtype == "custom_upload" and video_file_path and os.path.exists(str(video_file_path)):
+            prog("Refreshing YouTube token...")
+            ch=_fetchone(db, "SELECT * FROM channels WHERE id=?",(cid,))
+            if not ch: raise Exception("Channel not found")
+            token=refresh_yt_token(ch["refresh_token"])
+            title=ctitle or "My Video"
+            prog("Uploading your video to YouTube...")
+            mp4=str(video_file_path)
+            desc=f"{title}\n\n#finance #investing #money #youtube"
+            tags=["finance","money","investing","youtube"]
+            vid_id=upload_youtube(token,mp4,title,desc,tags)
+            if not vid_id: raise Exception("YouTube returned no video ID")
+            yt_url=f"https://youtube.com/watch?v={vid_id}"
+            print(f"   LIVE: {yt_url}")
+            if _HAS_PG and DATABASE_URL:
+                cur=pg_execute(db,"INSERT INTO videos (user_id,channel_id,title,type,status,youtube_id,youtube_url,script) VALUES (?,?,?,?,'uploaded',?,?,?) RETURNING id",(uid,cid,title,"custom_upload",vid_id,yt_url,"User uploaded video"))
+                vid_row_id=cur.fetchone()[0]
+            else:
+                cur=pg_execute(db,"INSERT INTO videos (user_id,channel_id,title,type,status,youtube_id,youtube_url,script) VALUES (?,?,?,?,'uploaded',?,?,?)",(uid,cid,title,"custom_upload",vid_id,yt_url,"User uploaded video"))
+                vid_row_id=cur.lastrowid
+            pg_execute(db,"UPDATE channels SET videos_uploaded=videos_uploaded+1 WHERE id=?",(cid,))
+            pg_execute(db,"UPDATE queue SET status='done',progress='Uploaded to YouTube!' WHERE id=?",(jid,))
+            db.commit(); db.close()
+            print(f"Job {jid} COMPLETE (custom upload)!")
+            return
+
         prog("Refreshing YouTube token...")
         ch=_fetchone(db, "SELECT * FROM channels WHERE id=?",(cid,))
         if not ch: raise Exception("Channel not found")
         token=refresh_yt_token(ch["refresh_token"])
 
         if cprompt:
-            prog("Using custom prompt..."); sd=script_from_prompt(cprompt,ctitle,niche)
+            prog("Using custom prompt..."); sd=script_from_prompt(cprompt,ctitle,niche); sd["niche"]=niche
         else:
-            sd=random.choice(SCRIPTS.get(niche,SCRIPTS["personal_finance"]))
+            sd=dict(random.choice(SCRIPTS.get(niche,SCRIPTS["personal_finance"]))); sd["niche"]=niche
         print(f"   Title: {sd['title']}")
 
         wd=OUT/f"job_{jid}"; wd.mkdir(exist_ok=True)
@@ -472,7 +559,7 @@ def process(job):
 
         prog("Mixing audio...")
         mixed=str(wd/"mixed.wav")
-        subprocess.run([FFMPEG,"-y","-i",wav,"-i",music,"-filter_complex","[0:a]volume=2.0[v];[1:a]volume=0.08[m];[v][m]amix=inputs=2:duration=first[out]","-map","[out]",mixed],capture_output=True)
+        subprocess.run([FFMPEG,"-y","-i",wav,"-i",music,"-filter_complex","[0:a]volume=2.0[v];[1:a]volume=0.08[m];[v][m]amix=inputs=2:duration=first[out]","-map","[out]","-ar","44100",mixed],capture_output=True)
         if not os.path.exists(mixed): mixed=wav
 
         prog("Generating video frames...")

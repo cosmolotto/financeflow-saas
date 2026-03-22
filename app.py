@@ -475,6 +475,8 @@ def migrate_db():
         "ALTER TABLE users ADD COLUMN referral_code TEXT",
         "ALTER TABLE users ADD COLUMN referred_by INTEGER DEFAULT 0",
         "ALTER TABLE channels ADD COLUMN upload_schedule TEXT DEFAULT 'daily'",
+        "ALTER TABLE queue ADD COLUMN video_file_path TEXT",
+        "ALTER TABLE users ADD COLUMN api_key TEXT",
     ]:
         try:
             pass
@@ -1592,16 +1594,26 @@ def generate_video():
     pass
     d = request.get_json() or {}
     channel_id = d.get("channel_id")
+    # Multi-channel support: accept channel_ids array or single channel_id
+    channel_ids = d.get("channel_ids", [])
+    if channel_id and not channel_ids:
+        channel_ids = [channel_id]
+    if not channel_ids:
+        return jsonify({"error": "channel_id or channel_ids required"}), 400
     niche = d.get("niche", "personal_finance")
     video_type = d.get("video_type", "short")
     custom_prompt = d.get("custom_prompt", "")
     custom_title = d.get("custom_title", "")
     db = get_db()
-    ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?",
-                    (channel_id, request.uid)).fetchone()
-    if not ch:
-        pass
-        return jsonify({"error": "Channel not found"}), 404
+    # Verify channels
+    valid_channels = []
+    for cid in channel_ids:
+        ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?",
+                        (cid, request.uid)).fetchone()
+        if ch:
+            valid_channels.append(cid)
+    if not valid_channels:
+        return jsonify({"error": "No valid channels found"}), 404
     # Server-side plan gating
     user_row = db.execute(
         "SELECT plan, COALESCE(trial_ends_at,0) AS trial_ends_at FROM users WHERE id=?",
@@ -1629,17 +1641,23 @@ def generate_video():
             pass
             return jsonify(
                 {"error": f"Weekly limit of {limits['videos_per_week']} videos reached. Upgrade to generate more."}), 429
-    job_id = db.execute(
-        "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_prompt, custom_title) VALUES (?,?,?,?,?,?)",
-        (request.uid, channel_id, video_type, niche, custom_prompt, custom_title)
-    ).lastrowid
+    # Queue one job per channel
+    job_ids = []
+    for cid in valid_channels:
+        job_id = db.execute(
+            "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_prompt, custom_title) VALUES (?,?,?,?,?,?)",
+            (request.uid, cid, video_type, niche, custom_prompt, custom_title)
+        ).lastrowid
+        job_ids.append(job_id)
+        if celery_app:
+            process_video_task.delay(job_id)
     db.commit()
-    if celery_app:
-        process_video_task.delay(job_id)
-        return jsonify({"success": True, "job_id": job_id,
-                       "status": "queued", "queue": "celery"})
-    return jsonify({"success": True, "job_id": job_id,
-                   "status": "queued", "queue": "sqlite"})
+    # Backwards compat: return single job_id if only one channel
+    if len(job_ids) == 1:
+        return jsonify({"success": True, "job_id": job_ids[0], "job_ids": job_ids,
+                       "status": "queued", "queue": "celery" if celery_app else "sqlite"})
+    return jsonify({"success": True, "job_ids": job_ids, "channels": len(job_ids),
+                   "status": "queued", "queue": "celery" if celery_app else "sqlite"})
 
 
 @app.route("/api/videos/generate-script", methods=["POST"])
@@ -1694,6 +1712,82 @@ def get_videos():
         "SELECT v.*, c.channel_name FROM videos v LEFT JOIN channels c ON v.channel_id=c.id "
         "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 50", (request.uid,)).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm"}
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB max upload
+
+
+@app.route("/api/videos/upload-own", methods=["POST"])
+@login_required
+def upload_own_video():
+    """User uploads their own MP4/MOV/AVI/WEBM file for direct YouTube upload."""
+    f = request.files.get("video")
+    channel_ids_raw = request.form.get("channel_ids", "")
+    channel_id = request.form.get("channel_id", "")
+    custom_title = request.form.get("title", "").strip() or request.form.get("custom_title", "").strip()
+
+    # Support single or multiple channels
+    if channel_ids_raw:
+        try:
+            channel_ids = [int(x) for x in channel_ids_raw.split(",") if x.strip()]
+        except Exception:
+            channel_ids = []
+    elif channel_id:
+        try:
+            channel_ids = [int(channel_id)]
+        except Exception:
+            channel_ids = []
+    else:
+        channel_ids = []
+
+    if not f:
+        return jsonify({"error": "No video file provided"}), 400
+    if not channel_ids:
+        return jsonify({"error": "channel_id or channel_ids required"}), 400
+
+    ext = os.path.splitext(f.filename or "")[1].lower()
+    if ext not in ALLOWED_VIDEO_EXTS:
+        return jsonify({"error": f"File type not allowed. Accepted: {', '.join(sorted(ALLOWED_VIDEO_EXTS))}"}), 400
+
+    db = get_db()
+    # Verify all channels belong to user
+    for cid in channel_ids:
+        ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?", (cid, request.uid)).fetchone()
+        if not ch:
+            return jsonify({"error": f"Channel {cid} not found"}), 404
+
+    # Save file once
+    upload_dir = os.path.join(os.getcwd(), "uploads", "videos")
+    os.makedirs(upload_dir, exist_ok=True)
+    fname = f"upload_{request.uid}_{int(time.time())}{ext}"
+    fpath = os.path.join(upload_dir, fname)
+    f.save(fpath)
+
+    # Queue one job per channel
+    job_ids = []
+    for cid in channel_ids:
+        job_id = db.execute(
+            "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_title, video_file_path, status) VALUES (?,?,?,?,?,?,'pending')",
+            (request.uid, cid, "custom_upload", "personal_finance", custom_title, fpath)
+        ).lastrowid
+        job_ids.append(job_id)
+    db.commit()
+
+    return jsonify({
+        "success": True,
+        "job_ids": job_ids,
+        "file": fname,
+        "channels": len(channel_ids),
+        "status": "queued",
+        "message": f"Video queued for upload to {len(channel_ids)} channel(s)"
+    })
+
+
+@app.route("/uploads/videos/<path:filename>")
+def serve_uploaded_videos(filename):
+    upload_dir = os.path.join(os.getcwd(), "uploads", "videos")
+    return send_from_directory(upload_dir, filename)
 
 # ── Social API ──────────────────────────────────────────────────────────
 
@@ -2902,6 +2996,251 @@ def health():
         "stripe": bool(STRIPE_KEY and HAS_STRIPE),
         "celery": bool(celery_app),
         "queue": "celery+redis" if celery_app else "sqlite",
+    })
+
+
+# ── CORS for mobile apps ─────────────────────────────────────────────────
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
+    return response
+
+
+@app.route("/api/mobile/", defaults={"path": ""}, methods=["OPTIONS"])
+@app.route("/api/mobile/<path:path>", methods=["OPTIONS"])
+def mobile_preflight(path):
+    from flask import Response
+    return Response("", status=200)
+
+
+# ── Mobile API helpers ───────────────────────────────────────────────────
+
+
+def get_mobile_user():
+    """Authenticate mobile requests via JWT Bearer token or X-API-Key."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        user = parse_token(auth[7:])
+        if user:
+            return user["user_id"]
+    api_key = request.headers.get("X-API-Key", "") or request.args.get("api_key", "")
+    if api_key:
+        db = get_db()
+        users = db.execute("SELECT id FROM users LIMIT 1000").fetchall()
+        for u in users:
+            if hashlib.md5(f"ff-{u['id']}".encode()).hexdigest() == api_key:
+                return u["id"]
+    return None
+
+
+def mobile_login_required(f):
+    @wraps(f)
+    def wrap(*a, **kw):
+        uid = get_mobile_user()
+        if not uid:
+            return jsonify({"error": "Unauthorized — provide Bearer token or X-API-Key"}), 401
+        request.uid = uid
+        return f(*a, **kw)
+    return wrap
+
+
+# ── Mobile API endpoints ──────────────────────────────────────────────────
+
+
+@app.route("/api/mobile/dashboard")
+@mobile_login_required
+def mobile_dashboard():
+    """GET /api/mobile/dashboard — full stats for mobile app."""
+    db = get_db()
+    u = db.execute(
+        "SELECT id, email, full_name, plan, COALESCE(trial_ends_at,0) AS trial_ends_at, "
+        "COALESCE(referral_code,'') AS referral_code FROM users WHERE id=?",
+        (request.uid,)).fetchone()
+    if not u:
+        return jsonify({"error": "User not found"}), 404
+    channels = db.execute(
+        "SELECT id, channel_name, niche, video_type, COALESCE(subscriber_count,0) AS subscribers, "
+        "COALESCE(view_count,0) AS views, videos_uploaded, COALESCE(autopilot,0) AS autopilot "
+        "FROM channels WHERE user_id=? AND active=1", (request.uid,)).fetchall()
+    total_videos = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=?", (request.uid,)).fetchone()[0]
+    uploaded = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'", (request.uid,)).fetchone()[0]
+    pending = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status IN ('pending','processing')", (request.uid,)).fetchone()[0]
+    trial_active = int(u["trial_ends_at"] or 0) > int(time.time())
+    api_key = hashlib.md5(f"ff-{u['id']}".encode()).hexdigest()
+    return jsonify({
+        "user": {
+            "id": u["id"],
+            "email": u["email"],
+            "name": u["full_name"] or u["email"],
+            "plan": u["plan"],
+            "api_key": api_key,
+            "trial_active": trial_active,
+            "referral_code": u["referral_code"],
+        },
+        "stats": {
+            "total_videos": total_videos,
+            "uploaded": uploaded,
+            "pending": pending,
+            "channels": len(channels),
+        },
+        "channels": [dict(c) for c in channels],
+        "worker_online": worker_online_status(),
+    })
+
+
+@app.route("/api/mobile/generate", methods=["POST"])
+@mobile_login_required
+def mobile_generate():
+    """POST /api/mobile/generate — queue a video generation job."""
+    d = request.get_json() or {}
+    channel_id = d.get("channel_id")
+    channel_ids = d.get("channel_ids", [])
+    if channel_id and not channel_ids:
+        channel_ids = [channel_id]
+    if not channel_ids:
+        return jsonify({"error": "channel_id required"}), 400
+    niche = d.get("niche", "personal_finance")
+    video_type = d.get("video_type", "short")
+    custom_prompt = d.get("custom_prompt", "")
+    custom_title = d.get("custom_title", "")
+    db = get_db()
+    job_ids = []
+    for cid in channel_ids:
+        ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?", (cid, request.uid)).fetchone()
+        if not ch:
+            continue
+        job_id = db.execute(
+            "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_prompt, custom_title) VALUES (?,?,?,?,?,?)",
+            (request.uid, cid, video_type, niche, custom_prompt, custom_title)
+        ).lastrowid
+        job_ids.append(job_id)
+    db.commit()
+    if not job_ids:
+        return jsonify({"error": "No valid channels"}), 404
+    return jsonify({"success": True, "job_ids": job_ids, "status": "queued"})
+
+
+@app.route("/api/mobile/upload", methods=["POST"])
+@mobile_login_required
+def mobile_upload():
+    """POST /api/mobile/upload — upload own video file for a channel."""
+    f = request.files.get("video")
+    channel_id = request.form.get("channel_id", "")
+    custom_title = request.form.get("title", "").strip()
+    if not f or not channel_id:
+        return jsonify({"error": "video file and channel_id required"}), 400
+    ext = os.path.splitext(f.filename or "")[1].lower()
+    if ext not in ALLOWED_VIDEO_EXTS:
+        return jsonify({"error": f"File type not allowed. Use: {', '.join(sorted(ALLOWED_VIDEO_EXTS))}"}), 400
+    db = get_db()
+    try:
+        cid = int(channel_id)
+    except Exception:
+        return jsonify({"error": "Invalid channel_id"}), 400
+    ch = db.execute("SELECT id FROM channels WHERE id=? AND user_id=?", (cid, request.uid)).fetchone()
+    if not ch:
+        return jsonify({"error": "Channel not found"}), 404
+    upload_dir = os.path.join(os.getcwd(), "uploads", "videos")
+    os.makedirs(upload_dir, exist_ok=True)
+    fname = f"mobile_{request.uid}_{int(time.time())}{ext}"
+    fpath = os.path.join(upload_dir, fname)
+    f.save(fpath)
+    job_id = db.execute(
+        "INSERT INTO queue (user_id, channel_id, video_type, niche, custom_title, video_file_path, status) VALUES (?,?,?,?,?,?,'pending')",
+        (request.uid, cid, "custom_upload", "personal_finance", custom_title, fpath)
+    ).lastrowid
+    db.commit()
+    return jsonify({"success": True, "job_id": job_id, "status": "queued"})
+
+
+@app.route("/api/mobile/login", methods=["POST"])
+def mobile_login():
+    """POST /api/mobile/login — returns JWT token for mobile app."""
+    d = request.get_json() or {}
+    email = d.get("email", "").strip().lower()
+    password = d.get("password", "")
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+    if not user or not check_pw(password, user["password_hash"]):
+        return jsonify({"error": "Invalid email or password"}), 401
+    token = make_token(user["id"], bool(user["is_admin"]))
+    api_key = hashlib.md5(f"ff-{user['id']}".encode()).hexdigest()
+    return jsonify({
+        "token": token,
+        "api_key": api_key,
+        "user_id": user["id"],
+        "email": user["email"],
+        "name": user["full_name"] or user["email"],
+        "plan": user["plan"],
+        "is_admin": bool(user["is_admin"]),
+    })
+
+
+@app.route("/api/mobile/register", methods=["POST"])
+def mobile_register():
+    """POST /api/mobile/register — register from mobile app."""
+    d = request.get_json() or {}
+    email = d.get("email", "").strip().lower()
+    password = d.get("password", "")
+    full_name = d.get("full_name", "") or d.get("name", "")
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+    db = get_db()
+    try:
+        user_count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        is_founding = 1 if user_count < 100 else 0
+        trial_days = 90 if is_founding else 7
+        trial_ends = int(time.time()) + trial_days * 86400
+        ref_code = secrets.token_hex(4).upper()
+        db.execute(
+            "INSERT INTO users (email, password_hash, full_name, is_founding_member, trial_ends_at, referral_code) VALUES (?,?,?,?,?,?)",
+            (email, hash_pw(password), full_name, is_founding, trial_ends, ref_code))
+        db.commit()
+        user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        uid = user["id"]
+        token = make_token(uid)
+        api_key = hashlib.md5(f"ff-{uid}".encode()).hexdigest()
+        return jsonify({
+            "token": token,
+            "api_key": api_key,
+            "user_id": uid,
+            "email": email,
+            "plan": "starter",
+            "trial_days": trial_days,
+        })
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            return jsonify({"error": "Email already registered"}), 400
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/mobile/videos")
+@mobile_login_required
+def mobile_videos():
+    """GET /api/mobile/videos — list user's videos."""
+    db = get_db()
+    limit = int(request.args.get("limit", 50))
+    offset = int(request.args.get("offset", 0))
+    rows = db.execute(
+        "SELECT v.id, v.title, v.type, v.status, v.youtube_id, v.youtube_url, "
+        "v.created_at, c.channel_name FROM videos v "
+        "LEFT JOIN channels c ON v.channel_id=c.id "
+        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT ? OFFSET ?",
+        (request.uid, limit, offset)).fetchall()
+    queue = db.execute(
+        "SELECT id, status, progress, niche, video_type, created_at FROM queue "
+        "WHERE user_id=? AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 10",
+        (request.uid,)).fetchall()
+    return jsonify({
+        "videos": [dict(r) for r in rows],
+        "queue": [dict(q) for q in queue],
+        "total": db.execute("SELECT COUNT(*) FROM videos WHERE user_id=?", (request.uid,)).fetchone()[0],
     })
 
 
