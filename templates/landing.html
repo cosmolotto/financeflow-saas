@@ -84,7 +84,7 @@ h2{font-family:'Syne',sans-serif;font-size:clamp(32px,4vw,52px);font-weight:800;
 .plan .btn{width:100%;text-align:center;padding:14px}
 
 /* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.modal-overlay{display:none;position:fixed;top:0;right:0;bottom:0;left:0;inset:0;background:rgba(0,0,0,0.85);z-index:9999 !important;align-items:center;justify-content:center;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .modal-overlay.active{display:flex}
 .modal{background:var(--dark2);border:1px solid var(--border);border-radius:24px;padding:48px;width:100%;max-width:440px;position:relative;max-height:calc(100vh - 40px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:auto}
 .modal h3{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;margin-bottom:8px}
@@ -426,25 +426,20 @@ function switchTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
 }
 function selectPlan(plan) {
-  // If already logged in (cookie/session exists), go straight to dashboard
-  fetch('/api/payments/status').then(r => {
-    if (r.ok && r.status !== 401) {
-      window.location.href = '/dashboard';
-    } else {
-      openModal(plan === 'starter' ? 'register' : 'register');
-      window._selectedPlan = plan;
-    }
-  }).catch(() => {
-    openModal('register');
-    window._selectedPlan = plan;
-  });
+  window._selectedPlan = plan;
+  openModal('register');
 }
 async function register() {
-  const name = document.getElementById('regName').value;
-  const email = document.getElementById('regEmail').value;
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
   const password = document.getElementById('regPassword').value;
   const err = document.getElementById('regError');
+  const btn = document.querySelector('#registerForm .btn-gold');
   err.style.display = 'none';
+  if (!name) { err.textContent = 'Enter your name.'; err.style.display = 'block'; return; }
+  if (!email) { err.textContent = 'Enter your email.'; err.style.display = 'block'; return; }
+  if (!password || password.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Creating account…';
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
@@ -452,15 +447,19 @@ async function register() {
       body: JSON.stringify({full_name: name, email, password, ref: new URLSearchParams(window.location.search).get('ref') || ''})
     });
     const data = await res.json();
-    if (data.error) { err.textContent = data.error; err.style.display = 'block'; return; }
-    window.location.href = data.redirect;
-  } catch(e) { err.textContent = 'Something went wrong.'; err.style.display = 'block'; }
+    if (data.error) { err.textContent = data.error; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account →'; return; }
+    window.location.href = data.redirect || '/dashboard';
+  } catch(e) { err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account →'; }
 }
 async function loginUser() {
-  const email = document.getElementById('loginEmail').value;
+  const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
   const err = document.getElementById('loginError');
+  const btn = document.querySelector('#loginForm .btn-gold');
   err.style.display = 'none';
+  if (!email) { err.textContent = 'Enter your email.'; err.style.display = 'block'; return; }
+  if (!password) { err.textContent = 'Enter your password.'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Logging in…';
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -468,16 +467,24 @@ async function loginUser() {
       body: JSON.stringify({email, password})
     });
     const data = await res.json();
-    if (data.error) { err.textContent = data.error; err.style.display = 'block'; return; }
-    window.location.href = data.redirect;
-  } catch(e) { err.textContent = 'Something went wrong.'; err.style.display = 'block'; }
+    if (data.error) { err.textContent = data.error; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Login →'; return; }
+    window.location.href = data.redirect || '/dashboard';
+  } catch(e) { err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Login →'; }
 }
 document.getElementById('authModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
-// Close on Escape key
+// Close on Escape, submit active form on Enter
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); return; }
+  if (e.key === 'Enter' && document.getElementById('authModal').classList.contains('active')) {
+    var tag = e.target && e.target.tagName;
+    if (tag === 'INPUT') {
+      if (document.getElementById('registerForm').style.display !== 'none') register();
+      else if (document.getElementById('loginForm').style.display !== 'none') loginUser();
+      else if (document.getElementById('forgotForm').style.display !== 'none') doForgot();
+    }
+  }
 });
 // ── Password Reset ───────────────────────────────────────────────────────
 {% if show_reset %}
