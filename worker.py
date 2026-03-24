@@ -29,8 +29,9 @@ if DATABASE_URL:
 
 CLIENT_ID       = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET   = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-ELEVENLABS_KEY  = os.environ.get("ELEVENLABS_API_KEY", "")
-OPENAI_KEY      = os.environ.get("OPENAI_API_KEY", "")
+ELEVENLABS_KEY     = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Rachel
+OPENAI_KEY         = os.environ.get("OPENAI_API_KEY", "")
 
 def find_ffmpeg():
     # System PATH first (works on Railway/Linux after nixpacks installs ffmpeg)
@@ -171,11 +172,11 @@ def make_voice(text, out_wav, voice_id=None, rate=165):
     # Try ElevenLabs first if key is available
     if ELEVENLABS_KEY:
         try:
-            vid = voice_id or "pNInz6obpgDQGcFmaJgB"  # Adam voice
+            vid = voice_id or ELEVENLABS_VOICE_ID
             payload = json.dumps({
                 "text": text,
-                "model_id": "eleven_monolingual_v1",
-                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {"stability": 0.55, "similarity_boost": 0.80, "style": 0.1, "use_speaker_boost": True}
             }).encode()
             req = urllib.request.Request(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{vid}",
@@ -195,7 +196,7 @@ def make_voice(text, out_wav, voice_id=None, rate=165):
                 print("   ElevenLabs voice OK")
                 return True
         except Exception as e:
-            print(f"   ElevenLabs failed ({e}), falling back to Mac say...")
+            print(f"   ElevenLabs failed ({e}), falling back to gTTS...")
     # Fallback: gTTS (works on Linux/Railway)
     try:
         from gtts import gTTS
@@ -329,20 +330,24 @@ def render_video(fdir,audio,out,fps):
     print(f"   [RENDER] ffmpeg={FFMPEG} frames={frame_count} audio={audio_size}B fps={fps}")
 
     if FFMPEG:
-        cmd=[FFMPEG,"-y","-threads","1","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
-             "-c:v","libx264","-preset","fast","-crf","18","-pix_fmt","yuv420p",
-             "-c:a","aac","-b:a","256k","-shortest","-movflags","+faststart",out]
-        r=subprocess.run(cmd, capture_output=True)
-        if r.returncode != 0:
-            print(f"   [RENDER] ffmpeg exited {r.returncode}")
-            print(f"   [RENDER] stderr: {r.stderr.decode('utf-8','replace')[-600:]}")
-        if os.path.exists(out):
-            size=os.path.getsize(out)
-            if size == 0:
-                print("   [RENDER] ffmpeg produced 0-byte file — treating as failure")
-                os.remove(out)
-            else:
-                print(f"   [RENDER] ffmpeg OK — {size/1024/1024:.2f}MB")
+        for attempt, (preset, crf) in enumerate([("fast", "18"), ("ultrafast", "28")]):
+            cmd=[FFMPEG,"-y","-threads","1","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
+                 "-c:v","libx264","-preset",preset,"-crf",crf,"-pix_fmt","yuv420p",
+                 "-c:a","aac","-b:a","256k","-shortest","-movflags","+faststart",out]
+            if attempt > 0:
+                print(f"   [RENDER] Retry {attempt} with preset={preset} crf={crf}")
+            r=subprocess.run(cmd, capture_output=True)
+            if r.returncode != 0:
+                print(f"   [RENDER] ffmpeg exited {r.returncode}")
+                print(f"   [RENDER] stderr: {r.stderr.decode('utf-8','replace')[-600:]}")
+                continue
+            if os.path.exists(out):
+                size=os.path.getsize(out)
+                if size == 0:
+                    print("   [RENDER] ffmpeg produced 0-byte file — retrying")
+                    os.remove(out)
+                    continue
+                print(f"   [RENDER] ffmpeg OK (preset={preset}) — {size/1024/1024:.2f}MB")
                 return True
 
     # moviepy fallback (no system ffmpeg needed)

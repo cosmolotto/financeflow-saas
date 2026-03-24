@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How FinanceFlow Works — Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#050810;color:#e8eaf0;line-height:1.7}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 60px;background:rgba(5,8,16,0.97);border-bottom:1px solid #1f2937;position:sticky;top:0;z-index:10;backdrop-filter:blur(12px)}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:20px;color:#FFD700;text-decoration:none}
+.logo span{color:#e8eaf0}
+nav a{color:#6b7280;text-decoration:none;font-size:14px}
+nav a:hover{color:#FFD700}
+.hero{text-align:center;padding:80px 24px 60px}
+h1{font-family:'Syne',sans-serif;font-size:clamp(36px,6vw,64px);font-weight:800;color:#fff;line-height:1.1;margin-bottom:20px}
+h1 span{color:#FFD700}
+.subtitle{color:#9ca3af;font-size:18px;max-width:580px;margin:0 auto 40px}
+.cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:60px}
+.btn-primary{background:#FFD700;color:#050810;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;text-decoration:none;transition:opacity 0.2s}
+.btn-primary:hover{opacity:0.9}
+.btn-secondary{background:transparent;color:#e8eaf0;padding:14px 32px;border-radius:50px;font-weight:600;font-size:15px;text-decoration:none;border:1px solid #374151;transition:border-color 0.2s}
+.btn-secondary:hover{border-color:#FFD700;color:#FFD700}
+
+/* Steps */
+.steps{max-width:900px;margin:0 auto;padding:0 24px 80px}
+.steps-title{text-align:center;font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:48px}
+.step{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-bottom:72px}
+.step:nth-child(even) .step-visual{order:-1}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:#FFD700;color:#050810;font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:16px}
+.step-label{font-size:12px;font-weight:600;color:#FFD700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.step h3{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:#fff;margin-bottom:14px;line-height:1.2}
+.step p{color:#9ca3af;font-size:15px}
+.step-visual{background:#0a0f1e;border:1px solid #1f2937;border-radius:20px;padding:28px;min-height:200px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden}
+.step-visual::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#FFD700,#FF8C00)}
+.mock-input{background:#111827;border:1px solid #374151;border-radius:8px;padding:10px 14px;font-size:13px;color:#9ca3af}
+.mock-input.filled{color:#e8eaf0;border-color:#4b5563}
+.mock-btn{background:#FFD700;color:#050810;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;width:fit-content}
+.mock-btn.outline{background:transparent;color:#e8eaf0;border:1px solid #374151}
+.mock-tag{display:inline-block;background:rgba(255,215,0,0.1);color:#FFD700;border:1px solid rgba(255,215,0,0.2);border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600}
+.mock-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mock-check{width:16px;height:16px;border-radius:4px;background:#4ade80;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.mock-yt{background:linear-gradient(135deg,#FF0000,#cc0000);border-radius:8px;padding:10px 16px;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.mock-stat{display:flex;flex-direction:column}
+.mock-stat .val{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#FFD700}
+.mock-stat .lbl{font-size:12px;color:#6b7280}
+.mock-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.mock-progress{background:#1f2937;border-radius:100px;height:6px;overflow:hidden}
+.mock-progress-inner{height:100%;border-radius:100px;background:linear-gradient(90deg,#FFD700,#FF8C00)}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:4px}
+
+/* Google badge */
+.google-compliance{background:rgba(255,215,0,0.04);border:1px solid rgba(255,215,0,0.15);border-radius:16px;padding:32px 40px;max-width:720px;margin:0 auto 80px;text-align:center}
+.google-compliance h3{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#fff;margin-bottom:12px}
+.google-compliance p{color:#9ca3af;font-size:14px;margin-bottom:16px}
+.compliance-badges{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:20px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:#0a0f1e;border:1px solid #1f2937;border-radius:8px;padding:8px 14px;font-size:13px;color:#9ca3af}
+.badge svg{width:16px;height:16px;flex-shrink:0}
+
+/* FAQ */
+.faq{max-width:720px;margin:0 auto;padding:0 24px 80px}
+.faq-title{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#fff;text-align:center;margin-bottom:40px}
+.faq-item{border-bottom:1px solid #1f2937;padding:20px 0}
+.faq-q{font-weight:600;color:#e8eaf0;margin-bottom:8px}
+.faq-a{color:#9ca3af;font-size:14px}
+
+footer{border-top:1px solid #1f2937;padding:32px 60px;text-align:center;color:#4b5563;font-size:13px}
+@media(max-width:768px){
+  nav{padding:14px 16px}
+  .step{grid-template-columns:1fr}
+  .step:nth-child(even) .step-visual{order:0}
+  .steps{padding:0 16px 60px}
+  footer{padding:24px 16px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="logo">Finance<span>Flow</span></a>
+  <div style="display:flex;gap:24px;align-items:center">
+    <a href="/login">Log in</a>
+    <a href="/register" style="background:#FFD700;color:#050810;padding:8px 18px;border-radius:50px;font-weight:700;font-size:14px">Get Started</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1>How <span>FinanceFlow</span><br>Works in 3 Steps</h1>
+  <p class="subtitle">Connect your YouTube channel. Click Generate. Watch AI-produced finance videos upload automatically — every day.</p>
+  <div class="cta-row">
+    <a href="/register" class="btn-primary">Start Free Trial →</a>
+    <a href="/" class="btn-secondary">See Pricing</a>
+  </div>
+</div>
+
+<div class="steps">
+  <div class="steps-title">From zero to daily YouTube uploads</div>
+
+  <!-- Step 1 -->
+  <div class="step">
+    <div class="step-text">
+      <p class="step-label">Step 1</p>
+      <div class="step-num">1</div>
+      <h3>Create your account & connect YouTube</h3>
+      <p>Sign up in seconds. Then click "Connect YouTube Channel" to securely link your channel via Google OAuth 2.0. We only request the permissions needed to upload videos — nothing else.</p>
+    </div>
+    <div class="step-visual">
+      <div style="font-size:12px;color:#6b7280;font-weight:600;margin-bottom:4px">CREATE ACCOUNT</div>
+      <div class="mock-input filled">jane@example.com</div>
+      <div class="mock-input filled" style="color:#374151">••••••••••</div>
+      <div class="mock-btn">Create Account →</div>
+      <div style="height:1px;background:#1f2937;margin:4px 0"></div>
+      <div style="font-size:12px;color:#6b7280;font-weight:600;margin-bottom:4px">CONNECT YOUTUBE</div>
+      <div class="mock-row">
+        <div class="mock-yt">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5a3 3 0 00-2.1 2.1C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 002.1 2.1C4.5 20.4 12 20.4 12 20.4s7.5 0 9.4-.5a3 3 0 002.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8z"/><polygon fill="#050810" points="9.6,15.6 15.8,12 9.6,8.4"/></svg>
+          Connect YouTube Channel
+        </div>
+        <div class="mock-check">✓</div>
+        <span style="font-size:12px;color:#4ade80">Authorized</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step">
+    <div class="step-text">
+      <p class="step-label">Step 2</p>
+      <div class="step-num">2</div>
+      <h3>Choose your niche & click Generate</h3>
+      <p>Pick a finance niche (Crypto, Stock Market, Real Estate, etc.), choose Short or Long video format, and optionally add a custom prompt. FinanceFlow writes the script, generates the voiceover, creates the visual frames, and renders the final MP4 — all automatically.</p>
+    </div>
+    <div class="step-visual">
+      <div style="font-size:12px;color:#6b7280;font-weight:600;margin-bottom:8px">GENERATE VIDEO</div>
+      <div class="mock-row">
+        <div class="mock-tag">📈 Stock Market</div>
+        <div class="mock-tag" style="opacity:0.5">₿ Crypto</div>
+        <div class="mock-tag" style="opacity:0.5">🏠 Real Estate</div>
+      </div>
+      <div class="mock-input" style="margin-top:4px;color:#6b7280;font-size:12px">Custom prompt (optional)...</div>
+      <div class="mock-row" style="gap:6px">
+        <div class="mock-btn outline" style="font-size:12px;padding:7px 14px">Short (60s)</div>
+        <div class="mock-btn" style="font-size:12px;padding:7px 14px">Generate ✨</div>
+      </div>
+      <div style="margin-top:6px">
+        <div class="progress-label"><span>Rendering video...</span><span>73%</span></div>
+        <div class="mock-progress"><div class="mock-progress-inner" style="width:73%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step">
+    <div class="step-text">
+      <p class="step-label">Step 3</p>
+      <div class="step-num">3</div>
+      <h3>Video uploads to YouTube automatically</h3>
+      <p>Once rendered, FinanceFlow uploads the video directly to your YouTube channel with an optimised title, description, and tags — all via the official YouTube Data API v3. Enable Autopilot to repeat this daily without lifting a finger.</p>
+    </div>
+    <div class="step-visual">
+      <div style="font-size:12px;color:#6b7280;font-weight:600;margin-bottom:8px">UPLOAD COMPLETE</div>
+      <div class="mock-row">
+        <div class="mock-check">✓</div>
+        <span style="font-size:13px;color:#4ade80;font-weight:600">Uploaded to YouTube</span>
+      </div>
+      <div class="mock-input filled" style="font-size:12px">youtube.com/watch?v=dQw4w9WgXcQ</div>
+      <div style="height:1px;background:#1f2937;margin:4px 0"></div>
+      <div style="font-size:12px;color:#6b7280;font-weight:600;margin-bottom:8px">YOUR CHANNEL STATS</div>
+      <div class="mock-stats-row">
+        <div class="mock-stat"><span class="val">47</span><span class="lbl">Videos</span></div>
+        <div class="mock-stat"><span class="val">12.4K</span><span class="lbl">Subscribers</span></div>
+        <div class="mock-stat"><span class="val">2.1M</span><span class="lbl">Views</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Google / YouTube API compliance section -->
+<div class="google-compliance">
+  <h3>Built on Official Google APIs</h3>
+  <p>FinanceFlow uses the YouTube Data API v3 with OAuth 2.0 to upload videos on your behalf. We comply with all Google API Services Terms of Service and only request the minimum permissions required.</p>
+  <p style="font-size:13px">You can revoke access at any time via <a href="https://myaccount.google.com/permissions" target="_blank" style="color:#FFD700">myaccount.google.com/permissions</a>.</p>
+  <div class="compliance-badges">
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      OAuth 2.0 Secure Auth
+    </div>
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      YouTube Data API v3
+    </div>
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      Google Privacy Policy Compliant
+    </div>
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Minimal Scopes Only
+    </div>
+  </div>
+</div>
+
+<!-- FAQ -->
+<div class="faq">
+  <div class="faq-title">Frequently Asked Questions</div>
+
+  <div class="faq-item">
+    <div class="faq-q">Does FinanceFlow post to my YouTube without my permission?</div>
+    <div class="faq-a">No. Videos are only uploaded when you click Generate (or when Autopilot is enabled — which you opt in to explicitly). You can disable Autopilot or revoke YouTube access at any time.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">What YouTube permissions does FinanceFlow request?</div>
+    <div class="faq-a">We request <code style="background:#1f2937;padding:1px 6px;border-radius:4px;font-size:12px">youtube.upload</code> (to upload videos) and <code style="background:#1f2937;padding:1px 6px;border-radius:4px;font-size:12px">youtube.readonly</code> (to read channel stats). We do not access Gmail, Drive, or any other Google service.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">How do I revoke access?</div>
+    <div class="faq-a">Visit <a href="https://myaccount.google.com/permissions" target="_blank" style="color:#FFD700">myaccount.google.com/permissions</a>, find FinanceFlow, and click Remove. You can also disconnect from inside the FinanceFlow dashboard.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Are the generated videos original content?</div>
+    <div class="faq-a">Yes. Scripts are generated fresh each time by GPT-4, voiceovers are synthesised by ElevenLabs, and frames are rendered programmatically. Each video is unique.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">What AI is used for the voice?</div>
+    <div class="faq-a">ElevenLabs multilingual voice synthesis (model <code style="background:#1f2937;padding:1px 6px;border-radius:4px;font-size:12px">eleven_multilingual_v2</code>). You can also upload your own voice sample to use your voice.</div>
+  </div>
+</div>
+
+<div style="text-align:center;padding-bottom:80px">
+  <h2 style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:#fff;margin-bottom:16px">Ready to automate your channel?</h2>
+  <p style="color:#9ca3af;margin-bottom:32px">7-day free trial · No credit card required</p>
+  <a href="/register" class="btn-primary" style="font-size:17px;padding:16px 40px">Start Free Trial →</a>
+</div>
+
+<footer>
+  <p>© 2026 FinanceFlow &nbsp;·&nbsp; <a href="/privacy" style="color:#6b7280;text-decoration:none">Privacy Policy</a> &nbsp;·&nbsp; <a href="/terms" style="color:#6b7280;text-decoration:none">Terms of Service</a> &nbsp;·&nbsp; <a href="/" style="color:#6b7280;text-decoration:none">Home</a></p>
+</footer>
+
+</body>
+</html>

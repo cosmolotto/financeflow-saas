@@ -105,6 +105,7 @@ CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 APP_URL = os.environ.get(
     "APP_URL",
     "https://web-production-39b44.up.railway.app")
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*")  # comma-separated or * for all
 REDIRECT_URI = f"{APP_URL}/api/channels/callback"
 BREVO_KEY = os.environ.get("BREVO_API_KEY", "")
 MASTER_KEY = os.environ.get("MASTER_ADMIN_KEY", "MASTER_ADMIN_KEY")
@@ -2999,12 +3000,156 @@ def health():
     })
 
 
+@app.route("/demo")
+def demo():
+    return render_template("demo.html")
+
+
+@app.route("/api/mobile/docs")
+def mobile_docs():
+    docs_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinanceFlow Mobile API Docs</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Segoe UI',system-ui,sans-serif;background:#050810;color:#e8eaf0;line-height:1.7}}
+nav{{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(5,8,16,0.97);border-bottom:1px solid #1f2937;position:sticky;top:0;z-index:10}}
+.logo{{font-weight:800;font-size:20px;color:#FFD700;text-decoration:none}}
+.container{{max-width:900px;margin:0 auto;padding:40px 24px 80px}}
+h1{{font-size:36px;font-weight:800;color:#FFD700;margin-bottom:8px}}
+.subtitle{{color:#6b7280;margin-bottom:40px}}
+h2{{font-size:20px;font-weight:700;color:#e8eaf0;margin:40px 0 12px;padding-top:12px;border-top:1px solid #1f2937}}
+h2:first-of-type{{border-top:none;margin-top:0}}
+.endpoint{{background:#0a0f1e;border:1px solid #1f2937;border-radius:12px;padding:20px 24px;margin-bottom:20px}}
+.method{{display:inline-block;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700;margin-right:10px}}
+.get{{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}}
+.post{{background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)}}
+.path{{font-family:monospace;font-size:15px;color:#e8eaf0}}
+.desc{{color:#9ca3af;font-size:14px;margin-top:8px}}
+.params{{margin-top:14px}}
+.params h4{{font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}}
+table{{width:100%;border-collapse:collapse;font-size:13px}}
+th{{text-align:left;padding:6px 10px;color:#6b7280;font-weight:600;border-bottom:1px solid #1f2937}}
+td{{padding:7px 10px;color:#9ca3af;border-bottom:1px solid rgba(31,41,55,0.5)}}
+td:first-child{{font-family:monospace;color:#a5b4fc}}
+code{{background:#0d1117;border:1px solid #1f2937;border-radius:6px;padding:12px 16px;display:block;font-family:monospace;font-size:13px;color:#9ca3af;margin-top:10px;white-space:pre;overflow-x:auto}}
+.badge{{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:rgba(255,215,0,0.1);color:#FFD700;border:1px solid rgba(255,215,0,0.2);margin-left:6px}}
+footer{{border-top:1px solid #1f2937;padding:24px;text-align:center;color:#4b5563;font-size:13px}}
+</style>
+</head>
+<body>
+<nav><a href="/" class="logo">FinanceFlow</a><a href="/dashboard" style="color:#6b7280;font-size:14px;text-decoration:none">Dashboard →</a></nav>
+<div class="container">
+<h1>Mobile API Reference</h1>
+<p class="subtitle">REST API for the FinanceFlow Android / iOS app &nbsp;·&nbsp; Base URL: <code style="display:inline;background:none;border:none;padding:0;color:#FFD700">{APP_URL}/api/mobile</code></p>
+
+<h2>Authentication</h2>
+<p style="color:#9ca3af;font-size:14px;margin-bottom:14px">Two methods are supported on every protected endpoint:</p>
+<div class="endpoint">
+<span class="badge">Option 1</span> <span style="color:#e8eaf0;font-size:14px">Bearer JWT token in <code style="display:inline;background:none;border:none;padding:0;color:#a5b4fc">Authorization</code> header</span>
+<code>Authorization: Bearer &lt;token&gt;</code>
+</div>
+<div class="endpoint">
+<span class="badge">Option 2</span> <span style="color:#e8eaf0;font-size:14px">API Key in <code style="display:inline;background:none;border:none;padding:0;color:#a5b4fc">X-API-Key</code> header</span>
+<code>X-API-Key: &lt;your_api_key&gt;</code>
+<p class="desc" style="margin-top:8px">Your API key is shown in Dashboard → Settings. It is the MD5 of <code style="display:inline;background:none;border:none;padding:0;font-size:12px">ff-&lt;user_id&gt;</code>.</p>
+</div>
+
+<h2>Endpoints</h2>
+
+<div class="endpoint">
+<span class="method post">POST</span><span class="path">/api/mobile/register</span>
+<p class="desc">Create a new account.</p>
+<div class="params"><h4>Request Body (JSON)</h4>
+<table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>full_name</td><td>string</td><td>yes</td><td>User's full name</td></tr>
+<tr><td>email</td><td>string</td><td>yes</td><td>Email address</td></tr>
+<tr><td>password</td><td>string</td><td>yes</td><td>Min 6 characters</td></tr>
+</tbody></table></div>
+<code>{{"token": "...", "user_id": 42, "name": "Jane Doe", "plan": "trial", "api_key": "abc123..."}}</code>
+</div>
+
+<div class="endpoint">
+<span class="method post">POST</span><span class="path">/api/mobile/login</span>
+<p class="desc">Log in and receive a JWT token + API key.</p>
+<div class="params"><h4>Request Body (JSON)</h4>
+<table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>email</td><td>string</td><td>yes</td><td>Registered email</td></tr>
+<tr><td>password</td><td>string</td><td>yes</td><td>Account password</td></tr>
+</tbody></table></div>
+<code>{{"token": "...", "user_id": 42, "name": "Jane Doe", "plan": "pro", "api_key": "abc123..."}}</code>
+</div>
+
+<div class="endpoint">
+<span class="method get">GET</span><span class="path">/api/mobile/dashboard</span> <span class="badge">Auth required</span>
+<p class="desc">Get the user's dashboard summary.</p>
+<code>{{"user": {{"name": "...", "email": "...", "plan": "pro"}}, "channels": [{{"id": 1, "channel_name": "..."}}], "recent_jobs": [...], "stats": {{"total_videos": 12, "pending": 1}}}}</code>
+</div>
+
+<div class="endpoint">
+<span class="method post">POST</span><span class="path">/api/mobile/generate</span> <span class="badge">Auth required</span>
+<p class="desc">Generate and upload a video to YouTube.</p>
+<div class="params"><h4>Request Body (JSON)</h4>
+<table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>channel_id</td><td>integer</td><td>yes</td><td>Channel ID from dashboard</td></tr>
+<tr><td>video_type</td><td>string</td><td>no</td><td><code style="display:inline;background:none;border:none;padding:0">short</code> or <code style="display:inline;background:none;border:none;padding:0">long</code> (default: short)</td></tr>
+<tr><td>custom_prompt</td><td>string</td><td>no</td><td>Custom script prompt</td></tr>
+<tr><td>custom_title</td><td>string</td><td>no</td><td>Custom video title</td></tr>
+</tbody></table></div>
+<code>{{"success": true, "job_id": 99, "message": "Video queued"}}</code>
+</div>
+
+<div class="endpoint">
+<span class="method post">POST</span><span class="path">/api/mobile/upload</span> <span class="badge">Auth required</span>
+<p class="desc">Upload a video file directly to YouTube. Send as multipart/form-data.</p>
+<div class="params"><h4>Form Fields</h4>
+<table><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>video</td><td>file</td><td>yes</td><td>Video file (mp4, mov, avi, webm — max 2GB)</td></tr>
+<tr><td>channel_id</td><td>integer</td><td>yes</td><td>Target channel ID</td></tr>
+<tr><td>title</td><td>string</td><td>no</td><td>Custom video title</td></tr>
+</tbody></table></div>
+<code>{{"success": true, "job_id": 100}}</code>
+</div>
+
+<div class="endpoint">
+<span class="method get">GET</span><span class="path">/api/mobile/videos</span> <span class="badge">Auth required</span>
+<p class="desc">List recent video jobs (last 20).</p>
+<code>[{{"id": 99, "title": "...", "status": "done", "yt_url": "https://youtu.be/...", "created_at": "..."}}]</code>
+</div>
+
+<h2>Error Responses</h2>
+<p style="color:#9ca3af;font-size:14px;margin-bottom:14px">All errors return JSON with an <code style="display:inline;background:none;border:none;padding:0;color:#a5b4fc">error</code> key:</p>
+<code>{{"error": "Unauthorized"}}  // 401
+{{"error": "No channels connected"}}  // 400
+{{"error": "Plan expired"}}  // 403</code>
+
+</div>
+<footer>© 2026 FinanceFlow &nbsp;·&nbsp; <a href="/privacy" style="color:#6b7280;text-decoration:none">Privacy</a> &nbsp;·&nbsp; <a href="/terms" style="color:#6b7280;text-decoration:none">Terms</a></footer>
+</body>
+</html>"""
+    return docs_html
+
+
 # ── CORS for mobile apps ─────────────────────────────────────────────────
 
 
 @app.after_request
 def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    origin = request.headers.get("Origin", "")
+    if ALLOWED_ORIGINS == "*":
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    elif origin and origin in ALLOWED_ORIGINS.split(","):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    else:
+        response.headers["Access-Control-Allow-Origin"] = APP_URL
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
     return response
