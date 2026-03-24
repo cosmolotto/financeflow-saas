@@ -404,13 +404,14 @@ tr:hover td{background:rgba(255,255,255,0.01)}
             <input type="text" id="up-title" placeholder="Enter your video title">
           </div>
           <div class="fd">
-            <label>Video File <span style="color:var(--muted);font-weight:400">(MP4, MOV, AVI, WEBM)</span></label>
-            <div id="up-drop" onclick="document.getElementById('up-file').click()" style="border:2px dashed var(--border);border-radius:9px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(255,215,0,0.4)'" onmouseout="this.style.borderColor='var(--border)'" ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondrop="handleDrop(event)">
-              <div style="font-size:32px;margin-bottom:8px">📁</div>
-              <div style="font-weight:600;margin-bottom:4px" id="up-fname">Click or drag video here</div>
-              <div style="font-size:12px;color:var(--muted)">MP4, MOV, AVI, WEBM · Max 2GB</div>
+            <label>Video File <span style="color:var(--muted);font-weight:400">(MP4, MOV, AVI, WEBM, MKV)</span></label>
+            <div id="up-drop" style="border:2px dashed var(--border);border-radius:9px;padding:24px 16px;text-align:center;transition:border-color 0.2s" ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="handleDrop(event)">
+              <div style="font-size:36px;margin-bottom:8px">🎬</div>
+              <div style="font-weight:600;margin-bottom:6px;font-size:14px" id="up-fname">Drag video here or choose below</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:14px">MP4, MOV, AVI, WEBM, MKV · Max 500MB</div>
+              <button type="button" onclick="document.getElementById('up-file').click()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer;width:100%;max-width:280px;-webkit-tap-highlight-color:transparent;touch-action:manipulation">📱 Choose from Device</button>
             </div>
-            <input type="file" id="up-file" accept=".mp4,.mov,.avi,.webm,video/*" style="display:none" onchange="fileSelected(this)">
+            <input type="file" id="up-file" accept=".mp4,.mov,.avi,.webm,.mkv,video/*" style="display:none" onchange="fileSelected(this)">
           </div>
           <!-- Upload progress bar -->
           <div id="up-progress-wrap" style="display:none;margin-bottom:14px">

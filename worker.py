@@ -115,6 +115,116 @@ SCRIPTS = {
   {"title":"FinanceFlow Review — Automated YouTube for Finance","script":"Here is my honest FinanceFlow review after 30 days. It creates finance videos automatically using AI. You connect your YouTube channel, pick a niche like personal finance or crypto, and it handles everything. Scripts, voice, video, upload. The videos look professional. My channel went from zero to 30 videos in 30 days. The free trial is 7 days with no credit card. web-production-39b44.up.railway.app","color":(60,10,10),"accent":(255,215,0),"lines":["FINANCEFLOW","HONEST REVIEW","30 DAYS TESTED","AUTO SCRIPTS","AI VOICE","AUTO UPLOAD","ZERO EFFORT","7-DAY FREE TRIAL"]},
   {"title":"How to Make Money on YouTube Without Recording Videos","script":"You can build a profitable YouTube channel without ever recording a single video. Use AI automation. Tools like FinanceFlow write the scripts, generate AI voice narration, create the visuals, and upload automatically. Finance channels can monetize at 1,000 subscribers and earn thousands per month from ad revenue. Start your automated channel today at web-production-39b44.up.railway.app","color":(0,50,30),"accent":(100,255,150),"lines":["MAKE MONEY","ON YOUTUBE","WITHOUT","RECORDING","AI WRITES","AI SPEAKS","AI UPLOADS","START TODAY"]},
 ],
+# ── Extra built-in scripts (fallback when no OpenAI key) ─────────────────
+"personal_finance_extra": [
+  {"title":"The 50/30/20 Budget Rule That Changes Everything","script":"The 50 30 20 budget rule is the simplest way to fix your finances. Fifty percent of your income goes to needs: rent, food, utilities. Thirty percent to wants: eating out, entertainment, subscriptions. Twenty percent to savings and debt payoff. On a 3000 dollar monthly income that is 600 dollars automatically building your future. Start this today.","color":(80,20,20),"accent":(255,215,0),"lines":["50/30/20 RULE","CHANGES EVERYTHING","50% NEEDS","30% WANTS","20% SAVINGS","ON $3K/MO","= $600/MO","SAVED AUTO"]},
+  {"title":"Why You Need an Emergency Fund Now","script":"Without an emergency fund you are one car repair away from debt. Three to six months of expenses saved in a high yield account is not optional. It is the foundation of your financial life. If you lose your job tomorrow can you pay your bills for three months? If the answer is no then every dollar above your minimum debt payment should go to that fund first.","color":(20,60,100),"accent":(80,180,255),"lines":["EMERGENCY FUND","IS NOT OPTIONAL","NO FUND =","ONE BILL AWAY","FROM DEBT","3-6 MONTHS","EXPENSES SAVED","START NOW"]},
+  {"title":"Automate Your Savings — Never Think About It Again","script":"The secret of every wealthy person I have studied is automation. They never decide to save. Saving happens before they can spend. Set up an automatic transfer for the day after your paycheck lands. Even 50 dollars a week is 2600 a year. At 10 percent return in 20 years that is 158,000 dollars. Automate it today and stop relying on willpower.","color":(0,40,80),"accent":(100,200,255),"lines":["AUTOMATE","YOUR SAVINGS","WEALTHY PEOPLE","NEVER DECIDE","TO SAVE","$50/WEEK =","$158K IN 20YRS","SET IT TODAY"]},
+  {"title":"Index Funds Beat 96% of Professional Fund Managers","script":"Here is a fact that will shock you. Over the last 20 years 96 percent of actively managed funds failed to beat simple index funds. The S and P 500 has averaged 10 percent annually since 1928. You do not need a financial advisor. Buy VFIAX or VOO every single month. Stay in it forever. That is the entire strategy.","color":(30,10,70),"accent":(180,100,255),"lines":["INDEX FUNDS","BEAT 96% OF","FUND MANAGERS","S&P 500","10%/YR AVG","SINCE 1928","BUY VOO","EVERY MONTH"]},
+  {"title":"The Debt Avalanche Method — Pay Off Debt Fastest","script":"There are two ways to pay off debt. Avalanche pays the highest interest rate first while making minimum payments on the rest. Snowball pays the smallest balance first for motivation. Mathematically the avalanche method saves you the most money. On 20,000 of credit card debt at 22 percent you could save 4,000 dollars in interest versus the snowball. The math does not lie.","color":(140,10,10),"accent":(255,180,50),"lines":["DEBT AVALANCHE","SAVES MOST","PAY HIGHEST","RATE FIRST","MIN ON REST","SAVES $4K","ON $20K DEBT","VS SNOWBALL"]},
+  {"title":"What Rich People Buy That Poor People Don't","script":"Rich people buy assets. Poor people buy liabilities that look like assets. Rich people buy stocks, real estate, businesses. Poor people buy new cars, designer clothes, gadgets that depreciate. The difference is simple: assets put money in your pocket every month. Liabilities take money out. Before any major purchase ask yourself which one this is.","color":(100,60,0),"accent":(255,200,50),"lines":["ASSETS VS","LIABILITIES","RICH BUY","STOCKS REITS","BUSINESSES","POOR BUY","DEPRECIATING","STUFF"]},
+  {"title":"The 1% Rule for Instant Wealth Building","script":"You do not need a huge income to build wealth. You need the one percent rule. Increase your savings rate by just one percent every month. Month one save ten percent. Month two save eleven. By month twelve you are saving twenty two percent of your income automatically without feeling it. Tiny increases compounded create massive results.","color":(20,80,40),"accent":(80,255,120),"lines":["THE 1% RULE","BUILDS WEALTH","SAVE 1% MORE","EVERY MONTH","MONTH 1: 10%","MONTH 12: 22%","YOU WON'T","FEEL IT"]},
+  {"title":"Your Net Worth Is the Only Number That Matters","script":"Forget income. Forget salary. Net worth is the only number that predicts your financial future. Net worth is everything you own minus everything you owe. A doctor earning 300K with 500K in student debt has a lower net worth than a teacher with 200K in investments and no debt. Track your net worth monthly. Make it grow.","color":(60,0,100),"accent":(200,100,255),"lines":["NET WORTH","ONLY NUMBER","THAT MATTERS","ASSETS MINUS","LIABILITIES","DOCTOR $300K","SALARY BUT","NEGATIVE NET"]},
+],
+}
+
+# ── Topic lists for AI script generation rotation ────────────────────────
+TOPICS_PER_NICHE = {
+    "personal_finance": [
+        "hidden subscription fees draining your bank account",
+        "emergency fund how much you really need",
+        "compound interest explained with real numbers",
+        "high yield savings accounts vs regular banks",
+        "credit score hacks to boost 100 points fast",
+        "budgeting method that actually works",
+        "how to negotiate your salary for more money",
+        "401k mistakes costing you thousands every year",
+        "debt avalanche vs debt snowball method",
+        "frugal living habits of millionaires",
+        "side income that does not require a second job",
+        "how inflation silently steals your purchasing power",
+        "roth ira vs traditional ira which to pick",
+        "hidden home ownership costs nobody tells you",
+        "how to build 6 figure savings on average salary",
+        "bank fees you should never be paying",
+        "passive income strategies for under 1000 dollars",
+        "money habits of people who retire early",
+        "net worth calculation most people get wrong",
+        "stock market basics every adult must know",
+    ],
+    "crypto": [
+        "bitcoin halving and what it means for price",
+        "ethereum staking passive income explained",
+        "crypto tax mistakes that trigger IRS audits",
+        "altcoins vs bitcoin risk comparison 2025",
+        "cold wallet vs hot wallet security guide",
+        "defi yield farming risk versus reward",
+        "crypto portfolio diversification strategy",
+        "how to buy crypto safely for beginners",
+        "crypto scams destroying beginners portfolios",
+        "bitcoin mining is it still profitable 2025",
+        "layer 2 solutions making ethereum cheaper",
+        "stablecoin risks most investors ignore",
+        "dollar cost averaging into crypto explained",
+        "crypto market cycles next bull run prediction",
+        "web3 jobs that pay six figures",
+        "crypto tax loss harvesting strategy",
+        "decentralized vs centralized exchanges",
+        "blockchain real world applications 2025",
+        "nfts are they coming back in 2025",
+        "best crypto under 1 dollar with potential",
+    ],
+    "real_estate": [
+        "house hacking strategy to live rent free",
+        "first time homebuyer mistakes to avoid",
+        "rental property cash flow calculation",
+        "real estate investing with under 10000 dollars",
+        "REITs passive income without owning property",
+        "airbnb versus long term rental comparison",
+        "house flipping mistakes that cost beginners",
+        "property tax reduction strategies that work",
+        "how to find undervalued properties near you",
+        "real estate depreciation tax benefits explained",
+        "cap rate for beginners real estate investing",
+        "1031 exchange explained simply",
+        "commercial vs residential real estate returns",
+        "how interest rates crush home buying power",
+        "buy vs rent analysis 2025 real numbers",
+        "seller financing creative real estate strategy",
+        "building equity faster in your home",
+        "real estate market crash warning signals",
+        "rental income passive cash flow strategy",
+        "short term rentals vs long term which wins",
+    ],
+    "side_hustle": [
+        "freelancing on fiverr beginner success guide",
+        "print on demand passive income 2025",
+        "how to make 1000 dollars a month on etsy",
+        "youtube channel monetization realistic timeline",
+        "selling digital products that earn while you sleep",
+        "amazon fba beginner profit margins reality",
+        "affiliate marketing that actually pays in 2025",
+        "social media management business from home",
+        "AI tools to automate your side hustle income",
+        "reselling thrift store finds for profit",
+        "tutoring business startup guide no degree needed",
+        "car detailing weekend side hustle income",
+        "cleaning business profit margins explained",
+        "newsletter business monetization strategy",
+        "stock photography passive income stream",
+        "bookkeeping side hustle no accounting degree",
+        "dropshipping profitable niches this year",
+        "voice acting gigs for beginners online",
+        "lawn care business summer income guide",
+        "virtual assistant 25 dollars per hour from home",
+    ],
+    "financeflow_promo": [
+        "automated youtube channel with AI no recording",
+        "AI tool that uploads finance videos automatically",
+        "passive income youtube channel without effort",
+        "how to post daily on youtube without recording",
+        "finance youtube channel autopilot strategy",
+    ],
 }
 
 def get_db():
@@ -200,8 +310,44 @@ def make_voice(text, out_wav, voice_id=None, rate=165):
                 print("   ElevenLabs voice OK")
                 return True
         except Exception as e:
-            print(f"   ElevenLabs failed ({e}), falling back to gTTS...")
-    # Fallback: gTTS (works on Linux/Railway)
+            print(f"   ElevenLabs failed ({e}), trying OpenAI TTS...")
+    # OpenAI TTS (high quality, uses OPENAI_API_KEY)
+    if OPENAI_KEY:
+        try:
+            import openai as _oai
+            _oai_client = _oai.OpenAI(api_key=OPENAI_KEY)
+            response = _oai_client.audio.speech.create(
+                model="tts-1", voice="onyx", input=text, response_format="mp3"
+            )
+            mp3_path = out_wav.replace(".wav", "_oai.mp3")
+            with open(mp3_path, "wb") as f:
+                f.write(response.content)
+            if FFMPEG and os.path.exists(mp3_path):
+                subprocess.run([FFMPEG, "-y", "-i", mp3_path, out_wav], capture_output=True)
+                os.remove(mp3_path)
+            if os.path.exists(out_wav):
+                print("   OpenAI TTS voice OK")
+                return True
+        except Exception as e:
+            print(f"   OpenAI TTS failed ({e}), trying Edge TTS...")
+    # Edge TTS (free, high quality, en-US-GuyNeural)
+    try:
+        import asyncio, edge_tts
+        async def _run_edge():
+            communicate = edge_tts.Communicate(text, "en-US-GuyNeural")
+            mp3_path = out_wav.replace(".wav", "_edge.mp3")
+            await communicate.save(mp3_path)
+            return mp3_path
+        mp3_path = asyncio.run(_run_edge())
+        if FFMPEG and os.path.exists(mp3_path):
+            subprocess.run([FFMPEG, "-y", "-i", mp3_path, out_wav], capture_output=True)
+            os.remove(mp3_path)
+        if os.path.exists(out_wav):
+            print("   Edge TTS voice OK")
+            return True
+    except Exception as e:
+        print(f"   Edge TTS failed ({e}), trying gTTS...")
+    # gTTS fallback
     try:
         from gtts import gTTS
         tts = gTTS(text=text, lang='en', slow=False)
@@ -255,7 +401,7 @@ def make_music(out,dur=60):
     with wave.open(out,'w') as wf:
         wf.setnchannels(1);wf.setsampwidth(2);wf.setframerate(sr);wf.writeframes(b''.join(frames))
 
-def make_frames(sd,dur,fdir,vtype):
+def make_frames(sd,dur,fdir,vtype,bg_path=None):
     os.makedirs(fdir,exist_ok=True)
     W,H=(540,960) if vtype=="short" else (960,540)
     FPS=12; c,a=sd["color"],sd["accent"]; lines=sd["lines"]
@@ -268,22 +414,36 @@ def make_frames(sd,dur,fdir,vtype):
     actual_nf = len(frame_indices)
     if nf > MAX_FRAMES:
         print(f"   [FRAMES] Sampling {nf} → {actual_nf} frames (step={step}) to reduce memory")
+    # Load AI background image if available
+    bg_img = None
+    if bg_path and os.path.exists(bg_path):
+        try:
+            raw = Image.open(bg_path).convert("RGB").resize((W, H), Image.LANCZOS)
+            dark = Image.new("RGB", (W, H), (0, 0, 0))
+            bg_img = Image.blend(raw, dark, 0.45)
+            print(f"   [FRAMES] AI background loaded: {bg_path}")
+        except Exception as e:
+            print(f"   [FRAMES] BG load failed ({e}), using gradient")
+            bg_img = None
     cd=dur/max(len(lines),1)
     for out_idx, f in enumerate(frame_indices):
         t=f/FPS; li=min(int(t/cd),len(lines)-1)
-        img=Image.new("RGB",(W,H)); draw=ImageDraw.Draw(img)
-        # Animated gradient background with pulse
-        pulse=math.sin(t*0.8)*0.12+0.08
-        for y in range(0,H,2):
-            ratio=y/H
-            r=max(0,min(255,c[0]+int(ratio*45+pulse*25)))
-            g=max(0,min(255,c[1]+int(ratio*28+pulse*12)))
-            b=max(0,min(255,c[2]+int(ratio*55+pulse*35)))
-            draw.rectangle([(0,y),(W,y+1)],fill=(r,g,b))
-        # Subtle grid overlay for depth
-        gc=theme["grid"]
-        for gx in range(0,W,80): draw.line([(gx,0),(gx,H)],fill=(gc[0],gc[1],gc[2]))
-        for gy in range(0,H,80): draw.line([(0,gy),(W,gy)],fill=(gc[0],gc[1],gc[2]))
+        if bg_img:
+            img=bg_img.copy(); draw=ImageDraw.Draw(img)
+        else:
+            img=Image.new("RGB",(W,H)); draw=ImageDraw.Draw(img)
+            # Animated gradient background with pulse
+            pulse=math.sin(t*0.8)*0.12+0.08
+            for y in range(0,H,2):
+                ratio=y/H
+                r=max(0,min(255,c[0]+int(ratio*45+pulse*25)))
+                g=max(0,min(255,c[1]+int(ratio*28+pulse*12)))
+                b=max(0,min(255,c[2]+int(ratio*55+pulse*35)))
+                draw.rectangle([(0,y),(W,y+1)],fill=(r,g,b))
+            # Subtle grid overlay for depth
+            gc=theme["grid"]
+            for gx in range(0,W,80): draw.line([(gx,0),(gx,H)],fill=(gc[0],gc[1],gc[2]))
+            for gy in range(0,H,80): draw.line([(0,gy),(W,gy)],fill=(gc[0],gc[1],gc[2]))
         # Animated chart bars (finance chart motif)
         n_bars=8; bar_total_w=int(W*0.78); bar_w=bar_total_w//n_bars-4
         chart_bx=int(W*0.11); chart_by=int(H*0.84); chart_h=int(H*0.09)
@@ -502,17 +662,131 @@ def cross_post_social(channel_id,video_id,youtube_url,title,niche,thumb_path):
         pg_execute(db, "INSERT INTO social_posts (video_id,channel_id,platform,post_url,status,error_msg) VALUES (?,?,?,?,?,?)",(video_id,channel_id,platform,post_url,status,err))
         db.commit(); db.close()
 
-def script_from_prompt(prompt,title,niche):
-    colors={"personal_finance":(160,15,15),"crypto":(160,70,0),"real_estate":(15,55,15),"side_hustle":(0,55,110)}
-    accents={"personal_finance":(255,215,0),"crypto":(255,160,0),"real_estate":(100,220,100),"side_hustle":(50,150,255)}
-    c=colors.get(niche,(80,0,100)); a=accents.get(niche,(255,215,0))
-    out_title=title or f"Finance Tip — {niche.replace('_',' ').title()}"
-    words=prompt.upper().split(); lines=[]; chunk=[]
-    for w in words[:60]:
+_BG_CACHE_DIR = _HERE / "bg_cache"
+
+def get_ai_background(topic, vtype):
+    """Download background image from Pollinations.ai. Returns path or None."""
+    import hashlib
+    _BG_CACHE_DIR.mkdir(exist_ok=True)
+    W, H = (540, 960) if vtype == "short" else (960, 540)
+    topic_slug = urllib.parse.quote(topic.replace(" ", "+")[:60])
+    url = f"https://image.pollinations.ai/prompt/dark+finance+{topic_slug}+professional+cinematic?width={W}&height={H}&nologo=true"
+    cache_key = hashlib.md5(url.encode()).hexdigest()[:12]
+    cache_path = _BG_CACHE_DIR / f"{cache_key}.jpg"
+    if cache_path.exists():
+        print(f"   [BG] Cache hit")
+        return str(cache_path)
+    try:
+        print(f"   [BG] Downloading Pollinations background...")
+        req = urllib.request.Request(url, headers={"User-Agent": "FinanceFlow/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = r.read()
+        if len(data) < 5000:
+            print(f"   [BG] Response too small ({len(data)}B), skipping")
+            return None
+        with open(cache_path, "wb") as f:
+            f.write(data)
+        print(f"   [BG] Downloaded {len(data)//1024}KB")
+        return str(cache_path)
+    except Exception as e:
+        print(f"   [BG] Download failed ({e}), using gradient")
+        return None
+
+def ai_generate_script(topic, niche):
+    """Use GPT-4o-mini to generate a unique script + title + tags."""
+    if not OPENAI_KEY:
+        return None
+    try:
+        import openai as _oai
+        client = _oai.OpenAI(api_key=OPENAI_KEY)
+        script_resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content":
+                f"Write a 45-second YouTube Shorts script about '{topic}' for a finance channel. "
+                "Make it shocking, urgent, valuable. Start with a hook. Include specific numbers. "
+                "End with a CTA to subscribe. Spoken words only. No stage directions. No headers."}],
+            max_tokens=320, temperature=0.9,
+        )
+        script_text = script_resp.choices[0].message.content.strip()
+        meta_resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content":
+                f"For a YouTube Shorts finance video about '{topic}', provide:\n"
+                "TITLE: (under 70 chars, shocking/urgent)\n"
+                "TAGS: (10 comma-separated tags, no #)"}],
+            max_tokens=120, temperature=0.7,
+        )
+        meta = meta_resp.choices[0].message.content.strip()
+        title, tags = "", []
+        for line in meta.split("\n"):
+            if line.upper().startswith("TITLE:"):
+                title = line[6:].strip()
+            elif line.upper().startswith("TAGS:"):
+                tags = [t.strip().lower() for t in line[5:].split(",") if t.strip()]
+        print(f"   [AI] GPT-4o-mini script: '{title[:50]}' ({len(script_text)} chars)")
+        return {"script": script_text, "title": title or topic.title(), "tags": tags}
+    except Exception as e:
+        print(f"   [AI] GPT-4o-mini failed ({e}), using built-in library")
+        return None
+
+def get_next_topic(niche, channel_id):
+    """Pick a topic from TOPICS_PER_NICHE, avoiding the last 10 used."""
+    topics = TOPICS_PER_NICHE.get(niche, TOPICS_PER_NICHE["personal_finance"])
+    try:
+        db = get_db()
+        recent = _fetchall(db, "SELECT title FROM videos WHERE channel_id=? ORDER BY created_at DESC LIMIT 10", (channel_id,))
+        db.close()
+        used = [r["title"].lower() for r in recent]
+    except Exception:
+        used = []
+    available = [t for t in topics if not any(
+        any(w in u for w in t.lower().split()[:3]) for u in used
+    )]
+    return random.choice(available if available else topics)
+
+def _build_sd_from_ai(ai_result, topic, niche, ctitle):
+    """Build an sd dict from an AI-generated script result."""
+    colors  = {"personal_finance":(160,15,15),"crypto":(160,70,0),"real_estate":(15,55,15),"side_hustle":(0,55,110)}
+    accents = {"personal_finance":(255,215,0),"crypto":(255,160,0),"real_estate":(100,220,100),"side_hustle":(50,150,255)}
+    c = colors.get(niche,(80,0,100)); a = accents.get(niche,(255,215,0))
+    words = ai_result["script"].upper().split(); lines = []; chunk = []
+    for w in words[:64]:
         chunk.append(w)
-        if len(" ".join(chunk))>13: lines.append(" ".join(chunk)); chunk=[]
+        if len(" ".join(chunk)) > 13: lines.append(" ".join(chunk)); chunk=[]
     if chunk: lines.append(" ".join(chunk))
-    return {"title":out_title,"script":prompt,"color":c,"accent":a,"lines":lines[:10] or ["WATCH THIS","RIGHT NOW"],"niche":niche}
+    return {"title": ctitle or ai_result["title"], "script": ai_result["script"],
+            "color": c, "accent": a, "lines": lines[:8] or ["WATCH NOW","SUBSCRIBE"],
+            "niche": niche, "topic": topic, "tags": ai_result.get("tags", [])}
+
+def script_from_prompt(prompt, title, niche):
+    colors  = {"personal_finance":(160,15,15),"crypto":(160,70,0),"real_estate":(15,55,15),"side_hustle":(0,55,110)}
+    accents = {"personal_finance":(255,215,0),"crypto":(255,160,0),"real_estate":(100,220,100),"side_hustle":(50,150,255)}
+    c = colors.get(niche,(80,0,100)); a = accents.get(niche,(255,215,0))
+    script_text = prompt
+    # If OpenAI key available, generate a polished script from the prompt
+    if OPENAI_KEY:
+        try:
+            import openai as _oai
+            client = _oai.OpenAI(api_key=OPENAI_KEY)
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content":
+                    f"Write a 45-second YouTube Shorts script about '{prompt}' for a finance channel. "
+                    "Shocking, urgent, valuable. Hook first. Specific numbers. CTA at end. Spoken words only."}],
+                max_tokens=320, temperature=0.9,
+            )
+            script_text = resp.choices[0].message.content.strip()
+            print(f"   [AI] Custom prompt enhanced by GPT-4o-mini")
+        except Exception as e:
+            print(f"   [AI] Enhancement failed ({e}), using raw prompt")
+    out_title = title or prompt[:70]
+    words = script_text.upper().split(); lines = []; chunk = []
+    for w in words[:64]:
+        chunk.append(w)
+        if len(" ".join(chunk)) > 13: lines.append(" ".join(chunk)); chunk=[]
+    if chunk: lines.append(" ".join(chunk))
+    return {"title": out_title, "script": script_text, "color": c, "accent": a,
+            "lines": lines[:10] or ["WATCH THIS","RIGHT NOW"], "niche": niche, "topic": prompt}
 
 def process(job):
     db=get_db(); jid=job["id"]; uid=job["user_id"]; cid=job["channel_id"]
@@ -574,9 +848,18 @@ def process(job):
         token=refresh_yt_token(ch["refresh_token"])
 
         if cprompt:
-            prog("Using custom prompt..."); sd=script_from_prompt(cprompt,ctitle,niche); sd["niche"]=niche
+            prog("Using custom prompt...")
+            sd = script_from_prompt(cprompt, ctitle, niche)
         else:
-            sd=dict(random.choice(SCRIPTS.get(niche,SCRIPTS["personal_finance"]))); sd["niche"]=niche
+            topic = get_next_topic(niche, cid)
+            prog(f"AI topic: {topic}")
+            ai_result = ai_generate_script(topic, niche)
+            if ai_result:
+                sd = _build_sd_from_ai(ai_result, topic, niche, ctitle)
+            else:
+                # Built-in library fallback (no OpenAI key)
+                all_scripts = SCRIPTS.get(niche, SCRIPTS["personal_finance"]) + SCRIPTS.get(niche+"_extra", [])
+                sd = dict(random.choice(all_scripts)); sd["niche"] = niche; sd["topic"] = topic
         print(f"   Title: {sd['title']}")
 
         wd=OUT/f"job_{jid}"; wd.mkdir(exist_ok=True)
@@ -595,8 +878,11 @@ def process(job):
         subprocess.run([FFMPEG,"-y","-i",wav,"-i",music,"-filter_complex","[0:a]volume=2.0[v];[1:a]volume=0.08[m];[v][m]amix=inputs=2:duration=first[out]","-map","[out]","-ar","44100",mixed],capture_output=True)
         if not os.path.exists(mixed): mixed=wav
 
+        prog("Fetching AI background...")
+        bg_path = get_ai_background(sd.get("topic", niche.replace("_", " ")), vtype)
+
         prog("Generating video frames...")
-        fdir=str(wd/"frames"); fps=make_frames(sd,dur,fdir,vtype)
+        fdir=str(wd/"frames"); fps=make_frames(sd,dur,fdir,vtype,bg_path=bg_path)
 
         prog("Rendering final video...")
         mp4=str(wd/"video.mp4")
@@ -607,7 +893,8 @@ def process(job):
 
         prog("Uploading to YouTube...")
         desc=f"{sd['title']}\n\n{sd['script']}\n\n🔔 Subscribe!\n\n#personalfinance #money #finance #investing"
-        tags=["personalfinance","money","finance","moneytips","wealth","investing","shorts"]
+        base_tags=["personalfinance","money","finance","moneytips","wealth","investing","shorts"]
+        tags=list(dict.fromkeys(base_tags + sd.get("tags",[])))[:15]
         vid_id=upload_youtube(token,mp4,sd["title"],desc,tags)
         if not vid_id: raise Exception("YouTube returned no video ID")
         upload_thumb(token,vid_id,thumb)

@@ -1715,8 +1715,8 @@ def get_videos():
     return jsonify([dict(r) for r in rows])
 
 
-ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm"}
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2 GB max upload
+ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv"}
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB max upload
 
 
 @app.route("/api/videos/upload-own", methods=["POST"])
@@ -3300,6 +3300,13 @@ def mobile_upload():
     ).lastrowid
     db.commit()
     return jsonify({"success": True, "job_id": job_id, "status": "queued"})
+
+
+@app.route("/api/mobile/upload-video", methods=["POST"])
+@mobile_login_required
+def mobile_upload_video():
+    """POST /api/mobile/upload-video — alias of /api/mobile/upload for mobile apps."""
+    return mobile_upload()
 
 
 @app.route("/api/mobile/login", methods=["POST"])
