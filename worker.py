@@ -257,19 +257,19 @@ def make_music(out,dur=60):
 
 def make_frames(sd,dur,fdir,vtype):
     os.makedirs(fdir,exist_ok=True)
-    W,H=(1080,1920) if vtype=="short" else (1920,1080)
+    W,H=(540,960) if vtype=="short" else (960,540)
     FPS=12; c,a=sd["color"],sd["accent"]; lines=sd["lines"]
     niche=sd.get("niche","personal_finance")
     theme=NICHE_THEMES.get(niche,{"bg":(8,8,8),"bg2":(25,18,4),"grid":(35,28,8)})
     nf=int(dur*FPS)
-    # Cap frames to limit memory usage on Railway (512MB RAM)
-    MAX_FRAMES = 300 if vtype=="short" else 500
+    MAX_FRAMES = 150
+    step = max(1, nf // MAX_FRAMES) if nf > MAX_FRAMES else 1
+    frame_indices = list(range(0, nf, step))[:MAX_FRAMES]
+    actual_nf = len(frame_indices)
     if nf > MAX_FRAMES:
-        print(f"   [FRAMES] Capping {nf} → {MAX_FRAMES} frames to reduce memory")
-        nf = MAX_FRAMES
-        dur = nf / FPS
+        print(f"   [FRAMES] Sampling {nf} → {actual_nf} frames (step={step}) to reduce memory")
     cd=dur/max(len(lines),1)
-    for f in range(nf):
+    for out_idx, f in enumerate(frame_indices):
         t=f/FPS; li=min(int(t/cd),len(lines)-1)
         img=Image.new("RGB",(W,H)); draw=ImageDraw.Draw(img)
         # Animated gradient background with pulse
@@ -314,7 +314,7 @@ def make_frames(sd,dur,fdir,vtype):
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,f/fade)
         elif f>nf-fade:
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,max(0,(nf-f)/fade))
-        img.save(f"{fdir}/f{f:06d}.jpg",quality=78)
+        img.save(f"{fdir}/f{out_idx:06d}.jpg",quality=50)
     return FPS
 
 def make_thumb(sd,out,vtype):
@@ -334,21 +334,21 @@ def render_video(fdir,audio,out,fps):
     audio_size  = os.path.getsize(audio) if os.path.exists(audio) else 0
     print(f"   [RENDER] ffmpeg={FFMPEG} frames={frame_count} audio={audio_size}B fps={fps}")
 
-    # If too many frames, thin them out to reduce memory pressure
-    if frame_count > 400:
-        keep = all_frames[::2]
+    # If too many frames (shouldn't happen after make_frames cap, but safety net)
+    if frame_count > 150:
+        step = frame_count // 150
+        keep = all_frames[::step][:150]
         remove = set(all_frames) - set(keep)
         for fn in remove:
             try: os.remove(f"{fdir}/{fn}")
             except: pass
-        # Rename kept frames to sequential indices so ffmpeg pattern works
         for i, fn in enumerate(sorted(keep)):
             src = f"{fdir}/{fn}"
             dst = f"{fdir}/f{i:06d}.jpg"
             if src != dst:
                 os.rename(src, dst)
         frame_count = len(keep)
-        print(f"   [RENDER] Thinned to {frame_count} frames (was >{400})")
+        print(f"   [RENDER] Safety-thinned to {frame_count} frames")
 
     if FFMPEG:
         cmd=[FFMPEG,"-y","-threads","1","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
@@ -383,10 +383,11 @@ def render_video(fdir,audio,out,fps):
             return False
         frames = sorted([f"{fdir}/{fn}" for fn in os.listdir(fdir) if fn.endswith(".jpg")])
         print(f"   [RENDER] moviepy: {len(frames)} frames")
-        clip = ImageSequenceClip(frames, fps=fps)
+        clip = ImageSequenceClip(frames, fps=12)
         aclip = AudioFileClip(audio)
         clip = clip.set_audio(aclip)
-        clip.write_videofile(out, codec="libx264", audio_codec="aac", logger=None)
+        clip.write_videofile(out, codec="libx264", audio_codec="aac", logger=None,
+                             ffmpeg_params=["-preset","ultrafast","-crf","23","-threads","1"])
         if os.path.exists(out):
             size=os.path.getsize(out)
             if size == 0:
