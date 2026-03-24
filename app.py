@@ -841,6 +841,7 @@ def landing():
     pass
     db = get_db()
     user_count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    video_count = db.execute("SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
     founding_spots = max(0, 100 - user_count)
     show_reset = bool(request.args.get("show_reset"))
     reset_token = request.args.get("token", "")
@@ -848,6 +849,7 @@ def landing():
         "landing.html",
         plans=PLANS,
         user_count=user_count,
+        video_count=video_count,
         founding_spots=founding_spots,
         show_reset=show_reset,
         reset_token=reset_token)
@@ -868,6 +870,9 @@ def terms():
 @app.route("/onboarding")
 def onboarding():
     pass
+    url_token = request.args.get("_t", "")
+    if url_token:
+        session["token"] = url_token
     user = get_current_user()
     if not user:
         pass
@@ -914,6 +919,9 @@ def sitemap_xml():
 @app.route("/dashboard")
 def dashboard():
     pass
+    url_token = request.args.get("_t", "")
+    if url_token:
+        session["token"] = url_token
     user = get_current_user()
     if not user:
         pass
@@ -1054,9 +1062,18 @@ def dashboard():
 @app.route("/admin")
 def admin_page():
     pass
+    # Accept token via URL param (_t=) for post-login redirect where session cookie
+    # hasn't propagated yet (e.g. same-site cookie timing on first load).
+    url_token = request.args.get("_t", "")
+    if url_token:
+        session["token"] = url_token
     user = get_current_user()
-    if not user or not user.get("is_admin"):
-        pass
+    print(f"[ADMIN] session_token={bool(session.get('token'))} user={user}")
+    if not user:
+        print("[ADMIN] No user from token — redirecting to /")
+        return redirect("/")
+    if not user.get("is_admin"):
+        print(f"[ADMIN] user_id={user.get('user_id')} is_admin=False — redirecting to /")
         return redirect("/")
     db = get_db()
     total_users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
@@ -3137,6 +3154,75 @@ footer{{border-top:1px solid #1f2937;padding:24px;text-align:center;color:#4b556
     return docs_html
 
 
+# ── Public stats (no auth) ───────────────────────────────────────────────
+
+
+@app.route("/api/stats/public")
+def public_stats():
+    """Public stats endpoint — returns user and video counts for landing page."""
+    db = get_db()
+    user_count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    video_count = db.execute("SELECT COUNT(*) FROM videos WHERE status='uploaded'").fetchone()[0]
+    return jsonify({"users": user_count, "videos": video_count})
+
+
+# ── Public API docs ──────────────────────────────────────────────────────
+
+
+@app.route("/api/docs")
+def api_docs_public():
+    """Public API docs endpoint — redirects to the full docs page."""
+    return redirect("/api/mobile/docs")
+
+
+# ── n8n Webhooks ─────────────────────────────────────────────────────────
+
+N8N_WEBHOOK_SECRET = os.environ.get("N8N_WEBHOOK_SECRET", "")
+
+
+def _verify_n8n_secret():
+    """Return True if the incoming request has the correct n8n webhook secret."""
+    if not N8N_WEBHOOK_SECRET:
+        return True  # no secret configured — open (set N8N_WEBHOOK_SECRET in env to lock)
+    return request.headers.get("X-Webhook-Secret", "") == N8N_WEBHOOK_SECRET
+
+
+@app.route("/api/webhooks/video-uploaded", methods=["POST"])
+def webhook_video_uploaded():
+    """n8n hook — called after a video finishes uploading to YouTube.
+    Payload: {video_id, channel_id, youtube_url, title}
+    """
+    if not _verify_n8n_secret():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    video_id = data.get("video_id")
+    youtube_url = data.get("youtube_url", "")
+    if video_id:
+        db = get_db()
+        db.execute(
+            "UPDATE videos SET status='uploaded', youtube_url=? WHERE id=?",
+            (youtube_url, video_id))
+        db.commit()
+    print(f"[WEBHOOK] video-uploaded: video_id={video_id} url={youtube_url}")
+    return jsonify({"ok": True, "video_id": video_id})
+
+
+@app.route("/api/webhooks/user-registered", methods=["POST"])
+def webhook_user_registered():
+    """n8n hook — called when a new user completes registration.
+    Payload: {user_id, email, plan}
+    """
+    if not _verify_n8n_secret():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    user_id = data.get("user_id")
+    email = data.get("email", "")
+    plan = data.get("plan", "starter")
+    print(f"[WEBHOOK] user-registered: user_id={user_id} email={email} plan={plan}")
+    # Optionally trigger post-registration actions here (CRM sync, Slack notify, etc.)
+    return jsonify({"ok": True, "user_id": user_id, "email": email})
+
+
 # ── CORS for mobile apps ─────────────────────────────────────────────────
 
 
@@ -3152,6 +3238,15 @@ def add_cors_headers(response):
         response.headers["Access-Control-Allow-Origin"] = APP_URL
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
+    return response
+
+
+@app.after_request
+def security_headers(response):
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     return response
 
 

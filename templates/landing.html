@@ -151,12 +151,12 @@ footer p{color:var(--muted);font-size:14px}
       <div class="stat-label">Faster than manual</div>
     </div>
     <div>
-      <div class="stat-num">{{ user_count }}+</div>
+      <div class="stat-num" id="statUsers">{{ user_count }}+</div>
       <div class="stat-label">Active creators</div>
     </div>
     <div>
-      <div class="stat-num">24/7</div>
-      <div class="stat-label">Auto-uploading</div>
+      <div class="stat-num" id="statVideos">{{ video_count }}+</div>
+      <div class="stat-label">Videos generated</div>
     </div>
   </div>
 </section>
@@ -448,7 +448,9 @@ async function register() {
     });
     const data = await res.json();
     if (data.error) { err.textContent = data.error; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account →'; return; }
-    window.location.href = data.redirect || '/dashboard';
+    if (data.token) localStorage.setItem('ff_token', data.token);
+    const dest = data.redirect || '/dashboard';
+    window.location.href = dest + (dest.includes('?') ? '&' : '?') + '_t=' + encodeURIComponent(data.token || '');
   } catch(e) { err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account →'; }
 }
 async function loginUser() {
@@ -468,7 +470,9 @@ async function loginUser() {
     });
     const data = await res.json();
     if (data.error) { err.textContent = data.error; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Login →'; return; }
-    window.location.href = data.redirect || '/dashboard';
+    if (data.token) localStorage.setItem('ff_token', data.token);
+    const dest = data.redirect || '/dashboard';
+    window.location.href = dest + (dest.includes('?') ? '&' : '?') + '_t=' + encodeURIComponent(data.token || '');
   } catch(e) { err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Login →'; }
 }
 document.getElementById('authModal').addEventListener('click', function(e) {
@@ -564,6 +568,24 @@ async function doForgot() {
     errEl.style.display = 'block';
   }
 }
+// Live stats from DB
+(async function loadPublicStats() {
+  try {
+    const r = await fetch('/api/stats/public');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.users != null) {
+      const el = document.getElementById('statUsers');
+      if (el) el.textContent = d.users + '+';
+    }
+    if (d.videos != null) {
+      const el = document.getElementById('statVideos');
+      if (el) el.textContent = d.videos + '+';
+    }
+    // footer "Join X+ creators"
+    document.querySelectorAll('.footer-user-count').forEach(el => el.textContent = d.users + '+');
+  } catch(e) {}
+})();
 </script>
 </body>
 </html>

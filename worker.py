@@ -474,6 +474,16 @@ def make_frames(sd,dur,fdir,vtype,bg_path=None):
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,f/fade)
         elif f>nf-fade:
             dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,max(0,(nf-f)/fade))
+        # End card: last 3 seconds — black bg with "Made with FinanceFlow AI"
+        end_card_frames = int(FPS * 3)
+        if out_idx >= actual_nf - end_card_frames:
+            ec_alpha = min(1.0, (out_idx - (actual_nf - end_card_frames)) / max(1, FPS * 0.4))
+            ec = Image.new("RGB", (W, H), (0, 0, 0))
+            ec_draw = ImageDraw.Draw(ec)
+            ec_draw.text((W//2, H//2 - 40), "Made with", fill=(160, 160, 160), font=fnt(28), anchor="mm")
+            ec_draw.text((W//2, H//2 + 10), "FinanceFlow AI", fill=(255, 215, 0), font=fnt(52), anchor="mm")
+            ec_draw.text((W//2, H//2 + 70), "web-production-39b44.up.railway.app", fill=(100, 100, 100), font=fnt(18), anchor="mm")
+            img = Image.blend(img, ec, ec_alpha)
         img.save(f"{fdir}/f{out_idx:06d}.jpg",quality=50)
     return FPS
 
