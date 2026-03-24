@@ -34,15 +34,19 @@ ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWA
 OPENAI_KEY         = os.environ.get("OPENAI_API_KEY", "")
 
 def find_ffmpeg():
-    # System PATH first (works on Railway/Linux after nixpacks installs ffmpeg)
-    sys_ff = shutil.which("ffmpeg")
-    if sys_ff:
-        return sys_ff
-    # Mac/local fallbacks
-    for p in [os.path.expanduser("~/Downloads/ffmpeg"),"/opt/homebrew/bin/ffmpeg","/usr/local/bin/ffmpeg","/usr/bin/ffmpeg"]:
+    import shutil
+    # Try system ffmpeg first (Railway installs via nixpacks)
+    system = shutil.which('ffmpeg')
+    if system:
+        return system
+    # Try common paths
+    for p in [
+        '/root/.nix-profile/bin/ffmpeg',
+        '/usr/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg',
+        os.path.expanduser('~/Downloads/ffmpeg')
+    ]:
         if os.path.exists(p):
-            try: os.chmod(p, 0o755)
-            except: pass
             return p
     return None
 FFMPEG = find_ffmpeg()
