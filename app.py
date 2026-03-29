@@ -105,10 +105,10 @@ CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 APP_URL = os.environ.get(
     "APP_URL",
     "https://web-production-39b44.up.railway.app")
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*")  # comma-separated or * for all
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*")  # comma-separated origins or * for all (restrict in production)
 REDIRECT_URI = f"{APP_URL}/api/channels/callback"
 BREVO_KEY = os.environ.get("BREVO_API_KEY", "")
-MASTER_KEY = os.environ.get("MASTER_ADMIN_KEY", "MASTER_ADMIN_KEY")
+MASTER_KEY = os.environ.get("MASTER_ADMIN_KEY", "")
 JWT_SECRET = os.environ.get("SECRET_KEY", "change-me-in-railway")
 JWT_ALGO = "HS256"
 STRIPE_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
@@ -1986,6 +1986,83 @@ def stats():
         "plan": plan, "plan_limits": PLANS.get(plan, PLANS["starter"]),
     })
 
+
+@app.route("/api/analytics")
+@login_required
+def analytics():
+    """Detailed analytics for user's channels and videos."""
+    import datetime
+    db = get_db()
+    uid = request.uid
+
+    # Channel-level stats
+    channels = db.execute(
+        "SELECT id, channel_name, niche, video_type, videos_uploaded, "
+        "COALESCE(subscriber_count,0) AS subscribers, "
+        "COALESCE(view_count,0) AS views, "
+        "COALESCE(video_count,0) AS yt_videos, "
+        "COALESCE(autopilot,0) AS autopilot, "
+        "COALESCE(monetized,0) AS monetized "
+        "FROM channels WHERE user_id=? AND active=1", (uid,)
+    ).fetchall()
+
+    # Videos per day (last 30 days)
+    thirty_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=30)).isoformat()
+    daily_videos = db.execute(
+        "SELECT DATE(created_at) AS day, COUNT(*) AS count "
+        "FROM videos WHERE user_id=? AND created_at > ? "
+        "GROUP BY DATE(created_at) ORDER BY day ASC",
+        (uid, thirty_ago)
+    ).fetchall()
+
+    # Upload success rate
+    total_v = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=?", (uid,)).fetchone()[0]
+    uploaded_v = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=? AND status='uploaded'", (uid,)).fetchone()[0]
+    failed_v = db.execute("SELECT COUNT(*) FROM videos WHERE user_id=? AND status='failed'", (uid,)).fetchone()[0]
+
+    # Queue stats
+    total_q = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=?", (uid,)).fetchone()[0]
+    done_q = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='done'", (uid,)).fetchone()[0]
+    failed_q = db.execute("SELECT COUNT(*) FROM queue WHERE user_id=? AND status='failed'", (uid,)).fetchone()[0]
+
+    # Recent videos
+    recent = db.execute(
+        "SELECT v.id, v.title, v.status, v.youtube_url, v.created_at, c.channel_name "
+        "FROM videos v LEFT JOIN channels c ON v.channel_id=c.id "
+        "WHERE v.user_id=? ORDER BY v.created_at DESC LIMIT 10", (uid,)
+    ).fetchall()
+
+    # Social post stats
+    social_posted = db.execute(
+        "SELECT COUNT(*) FROM social_posts sp "
+        "JOIN channels c ON sp.channel_id=c.id "
+        "WHERE c.user_id=? AND sp.status='posted'", (uid,)
+    ).fetchone()[0]
+
+    # Niche breakdown (from queue since videos table has no niche column)
+    niche_counts = db.execute(
+        "SELECT COALESCE(niche,'personal_finance') AS niche, COUNT(*) AS count "
+        "FROM queue WHERE user_id=? GROUP BY niche", (uid,)
+    ).fetchall()
+
+    return jsonify({
+        "channels": [dict(c) for c in channels],
+        "totals": {
+            "videos_generated": total_v,
+            "videos_uploaded": uploaded_v,
+            "videos_failed": failed_v,
+            "upload_success_rate": round(uploaded_v / total_v * 100, 1) if total_v else 0,
+            "queue_total": total_q,
+            "queue_completed": done_q,
+            "queue_failed": failed_q,
+            "social_posts": social_posted,
+        },
+        "daily_videos": [{"day": r["day"], "count": r["count"]} for r in daily_videos],
+        "niche_breakdown": [{"niche": r["niche"], "count": r["count"]} for r in niche_counts],
+        "recent_videos": [dict(r) for r in recent],
+    })
+
+
 # ── Payment API ─────────────────────────────────────────────────────────
 
 
@@ -2335,8 +2412,7 @@ def admin_reject_payment(pid):
 def create_admin():
     pass
     d = request.get_json() or {}
-    if d.get("master_key") != MASTER_KEY:
-        pass
+    if not MASTER_KEY or d.get("master_key") != MASTER_KEY:
         return jsonify({"error": "Not authorized"}), 403
     email = d.get("email", "").strip().lower()
     password = d.get("password", "")
@@ -3582,6 +3658,58 @@ def _trial_expiry_worker():
         time.sleep(3600)
 
 
+def _autopilot_scheduler():
+    """Background thread: auto-queue videos for channels with autopilot enabled."""
+    import datetime
+    while True:
+        try:
+            db = get_db()
+            # Get all active autopilot channels
+            channels = db.execute(
+                "SELECT c.id, c.user_id, c.niche, c.video_type, c.upload_schedule, "
+                "c.channel_name, u.plan, COALESCE(u.trial_ends_at,0) AS trial_ends_at "
+                "FROM channels c JOIN users u ON c.user_id=u.id "
+                "WHERE c.autopilot=1 AND c.active=1"
+            ).fetchall()
+            for ch in channels:
+                try:
+                    # Check plan allows autopilot
+                    plan = ch["plan"]
+                    trial_active = int(ch["trial_ends_at"]) > int(time.time())
+                    effective_plan = "pro" if (trial_active and plan == "starter") else plan
+                    if not PLANS.get(effective_plan, {}).get("autopilot"):
+                        continue
+                    schedule = ch["upload_schedule"] or "daily"
+                    hours_gap = 22 if schedule == "daily" else 160  # ~7 days
+                    # Check last queued job for this channel
+                    last = db.execute(
+                        "SELECT created_at FROM queue WHERE channel_id=? "
+                        "ORDER BY created_at DESC LIMIT 1",
+                        (ch["id"],)
+                    ).fetchone()
+                    if last:
+                        try:
+                            last_dt = datetime.datetime.fromisoformat(str(last["created_at"]))
+                            age_h = (datetime.datetime.utcnow() - last_dt).total_seconds() / 3600
+                            if age_h < hours_gap:
+                                continue
+                        except Exception:
+                            pass
+                    # Queue a new autopilot job
+                    db.execute(
+                        "INSERT INTO queue (user_id, channel_id, video_type, niche, mode) "
+                        "VALUES (?,?,?,?,'autopilot')",
+                        (ch["user_id"], ch["id"], ch["video_type"] or "short", ch["niche"] or "personal_finance")
+                    )
+                    db.commit()
+                    print(f"[AUTOPILOT] Queued video for channel {ch['id']} ({ch['channel_name']})")
+                except Exception as ce:
+                    print(f"[AUTOPILOT] Channel {ch['id']} error: {ce}")
+        except Exception as e:
+            print(f"[AUTOPILOT] Scheduler error: {e}")
+        time.sleep(1800)  # Check every 30 minutes
+
+
 if DATABASE_URL and HAS_PG:
     print(f"[DB] Using PostgreSQL — {DATABASE_URL[:40]}...")
 else:
@@ -3592,9 +3720,11 @@ init_db()
 # Start background threads and register them for worker_online_status()
 _t1 = threading.Thread(target=_email_sequence_worker, daemon=True)
 _t2 = threading.Thread(target=_trial_expiry_worker, daemon=True)
+_t3 = threading.Thread(target=_autopilot_scheduler, daemon=True)
 _t1.start()
 _t2.start()
-_bg_threads.extend([_t1, _t2])
+_t3.start()
+_bg_threads.extend([_t1, _t2, _t3])
 
 if __name__ == "__main__":
 
