@@ -113,6 +113,8 @@ JWT_SECRET = os.environ.get("SECRET_KEY", "change-me-in-railway")
 JWT_ALGO = "HS256"
 STRIPE_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WH_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+MORVEN_WALLET_API = os.environ.get("MORVEN_WALLET_API_URL", "https://morven-wallet-api.onrender.com")
+MORVEN_AIRDROP_KEY = os.environ.get("MORVEN_AIRDROP_KEY", "")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 REDIS_URL = os.environ.get("REDIS_URL", "")
 ELEVENLABS_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
@@ -338,7 +340,9 @@ def init_db():
             reset_token            TEXT,
             reset_expires          INTEGER,
             stripe_customer_id     TEXT,
-            stripe_subscription_id TEXT
+            stripe_subscription_id TEXT,
+            morven_wallet_id       TEXT,
+            name                   TEXT
         );
         CREATE TABLE IF NOT EXISTS channels (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -478,6 +482,8 @@ def migrate_db():
         "ALTER TABLE channels ADD COLUMN upload_schedule TEXT DEFAULT 'daily'",
         "ALTER TABLE queue ADD COLUMN video_file_path TEXT",
         "ALTER TABLE users ADD COLUMN api_key TEXT",
+        "ALTER TABLE users ADD COLUMN morven_wallet_id TEXT",
+        "ALTER TABLE users ADD COLUMN name TEXT",
     ]:
         try:
             pass
@@ -3984,6 +3990,158 @@ _t1.start()
 _t2.start()
 _t3.start()
 _bg_threads.extend([_t1, _t2, _t3])
+
+# ── MorvenWallet SSO + MRV Payment Routes ─────────────────────────────────
+
+@app.route("/api/auth/morven-login", methods=["POST"])
+def morven_login():
+    """Exchange MorvenWallet JWT for FinanceFlow session token.
+    Frontend calls morvenWallet.login() → gets mrv_jwt → posts here."""
+    d = request.get_json(silent=True) or {}
+    mrv_jwt = d.get("mrv_jwt", "")
+    if not mrv_jwt:
+        return jsonify({"error": "mrv_jwt required"}), 400
+
+    # Verify with MorvenWallet API
+    try:
+        req = urllib.request.Request(
+            f"{MORVEN_WALLET_API}/api/wallet/balance",
+            headers={"Authorization": f"Bearer {mrv_jwt}", "Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            wallet_data = json.loads(resp.read())
+    except Exception as e:
+        # Fallback: decode JWT locally (mock mode support)
+        try:
+            import base64
+            payload_b64 = mrv_jwt.split(".")[1]
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "=="))
+            wallet_data = {"wallet_id": payload.get("wallet_id", ""), "mrv": 0}
+            if not payload.get("email"):
+                return jsonify({"error": "Invalid MorvenWallet token"}), 401
+            # Extract from payload directly
+            mrv_email = payload.get("email", "")
+            mrv_name  = payload.get("display_name", mrv_email.split("@")[0])
+            mrv_wid   = payload.get("wallet_id", "")
+        except Exception:
+            return jsonify({"error": f"Could not verify MorvenWallet token: {e}"}), 401
+    else:
+        # Decode payload for email
+        try:
+            import base64
+            payload_b64 = mrv_jwt.split(".")[1]
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "=="))
+            mrv_email = payload.get("email", "")
+            mrv_name  = payload.get("display_name", mrv_email.split("@")[0])
+            mrv_wid   = payload.get("wallet_id", wallet_data.get("wallet_id", ""))
+        except Exception:
+            return jsonify({"error": "Could not parse MorvenWallet token"}), 401
+
+    if not mrv_email:
+        return jsonify({"error": "No email in MorvenWallet token"}), 401
+
+    db = get_db()
+    # Find or create user linked to this MorvenWallet
+    user = db.execute("SELECT * FROM users WHERE email=?", (mrv_email,)).fetchone()
+    if not user:
+        uid = str(uuid.uuid4())
+        rand_pw = secrets.token_hex(16)
+        pw_hash = hash_pw(rand_pw)
+        db.execute(
+            "INSERT INTO users (id,email,name,password_hash,plan,morven_wallet_id) VALUES (?,?,?,?,'starter',?)"
+            " ON CONFLICT(email) DO UPDATE SET morven_wallet_id=excluded.morven_wallet_id",
+            (uid, mrv_email, mrv_name, pw_hash, mrv_wid)
+        )
+        db.commit()
+        user = db.execute("SELECT * FROM users WHERE email=?", (mrv_email,)).fetchone()
+    else:
+        # Update wallet_id if not set
+        if not user.get("morven_wallet_id") and mrv_wid:
+            db.execute("UPDATE users SET morven_wallet_id=? WHERE id=?", (mrv_wid, user["id"]))
+            db.commit()
+
+    token = make_token(user["id"], bool(user["is_admin"]))
+    session["token"] = token
+    return jsonify({
+        "token"      : token,
+        "redirect"   : "/dashboard",
+        "mrv_balance": wallet_data.get("mrv", 0),
+        "wallet_id"  : mrv_wid
+    })
+
+
+@app.route("/api/payments/mrv", methods=["POST"])
+@login_required
+def pay_with_mrv():
+    """Accept MRV payment for plan upgrade. Verifies against MorvenWallet API."""
+    user = get_current_user()
+    d    = request.get_json(silent=True) or {}
+    plan = d.get("plan", "pro")
+    mrv_jwt = d.get("mrv_jwt") or request.headers.get("X-Mrv-Token", "")
+
+    MRV_PRICES = {"starter": 0, "pro": 50, "agency": 200}
+    amount = MRV_PRICES.get(plan, 50)
+
+    if not mrv_jwt:
+        return jsonify({"error": "mrv_jwt required for MRV payment"}), 400
+
+    # Deduct via MorvenWallet API
+    try:
+        payload_bytes = json.dumps({
+            "amount"    : amount,
+            "product_id": f"financeflow-{plan}"
+        }).encode()
+        req = urllib.request.Request(
+            f"{MORVEN_WALLET_API}/api/payments/pay",
+            data=payload_bytes,
+            headers={
+                "Authorization" : f"Bearer {mrv_jwt}",
+                "Content-Type"  : "application/json"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            result = json.loads(resp.read())
+    except Exception as e:
+        return jsonify({"error": f"MRV payment failed: {e}"}), 502
+
+    if not result.get("success"):
+        return jsonify({"error": result.get("error", "Payment failed")}), 402
+
+    # Upgrade plan in DB
+    db = get_db()
+    db.execute("UPDATE users SET plan=? WHERE id=?", (plan, user["user_id"]))
+    db.execute(
+        "INSERT INTO payments (user_id,amount,plan,provider,status,reference) VALUES (?,?,?,'morven','approved',?)",
+        (user["user_id"], amount, plan, result.get("tx_id", ""))
+    )
+    db.commit()
+    return jsonify({
+        "success"    : True,
+        "plan"       : plan,
+        "tx_id"      : result.get("tx_id"),
+        "mrv_spent"  : amount,
+        "new_balance": result.get("new_balance", 0)
+    })
+
+
+@app.route("/api/wallet/mrv-balance")
+@login_required
+def mrv_balance_proxy():
+    """Proxy MRV balance check — reads from morvenWallet header token"""
+    mrv_jwt = request.headers.get("X-Mrv-Token", "")
+    if not mrv_jwt:
+        return jsonify({"mrv": 0, "error": "No MRV token provided"})
+    try:
+        req = urllib.request.Request(
+            f"{MORVEN_WALLET_API}/api/wallet/balance",
+            headers={"Authorization": f"Bearer {mrv_jwt}"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return jsonify(json.loads(resp.read()))
+    except Exception:
+        return jsonify({"mrv": 0, "error": "MorvenWallet API unavailable"})
+
 
 if __name__ == "__main__":
 

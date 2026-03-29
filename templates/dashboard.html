@@ -796,17 +796,26 @@ tr:hover td{background:rgba(255,255,255,0.01)}
       </select>
     </div>
     <div class="fd"><label>Payment Method</label>
-      <select id="pay-method">
+      <select id="pay-method" onchange="toggleMrvPaySection(this.value)">
         <option value="bank_transfer">🏦 Bank Transfer</option>
         <option value="jazzcash">📱 JazzCash</option>
         <option value="easypaisa">💚 EasyPaisa</option>
+        <option value="mrv">◈ Pay with MRV (MorvenWallet)</option>
       </select>
     </div>
-    <div class="fd"><label>Reference / Transaction Number</label><input type="text" id="pay-ref" placeholder="e.g. TRF-20240314-XXXX or JC-123456"></div>
-    <div style="background:rgba(255,215,0,0.04);border:1px solid rgba(255,215,0,0.15);border-radius:9px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px">
-      <strong style="color:var(--text)">Payment Details:</strong><br>
-      Bank: HBL · Account: 0123-4567890-01 · Title: FinanceFlow Ltd<br>
-      JazzCash / EasyPaisa: 0300-1234567 (FinanceFlow)
+    <div id="mrv-pay-section" style="display:none;background:rgba(224,200,117,0.06);border:1px solid rgba(224,200,117,0.25);border-radius:9px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:8px">◈ MorvenWallet Payment</div>
+      <div id="mrv-balance-display" style="font-size:12px;color:var(--muted);margin-bottom:10px">Balance: loading...</div>
+      <button class="btn bg sm" onclick="connectMrvWallet()" id="mrv-connect-btn">Connect MorvenWallet</button>
+      <div id="mrv-connected-info" style="display:none;font-size:12px;color:var(--green);margin-top:8px"></div>
+    </div>
+    <div id="ref-pay-section">
+      <div class="fd"><label>Reference / Transaction Number</label><input type="text" id="pay-ref" placeholder="e.g. TRF-20240314-XXXX or JC-123456"></div>
+      <div style="background:rgba(255,215,0,0.04);border:1px solid rgba(255,215,0,0.15);border-radius:9px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px">
+        <strong style="color:var(--text)">Payment Details:</strong><br>
+        Bank: HBL · Account: 0123-4567890-01 · Title: FinanceFlow Ltd<br>
+        JazzCash / EasyPaisa: 0300-1234567 (FinanceFlow)
+      </div>
     </div>
     <div class="mf"><button class="btn bg" onclick="submitPayment()">Submit Payment Request</button><button class="btn bo" onclick="cAll()">Cancel</button></div>
   </div>
@@ -1303,6 +1312,69 @@ async function loadWizard(){
   }catch(e){
     pf.textContent='';const al=document.createElement('div');al.className='al aer';al.textContent=`Failed to load wizard: ${e.message}`;pf.appendChild(al);
   }
+}
+</script>
+<!-- MorvenWallet SDK -->
+<script src="https://morven-sdk.vercel.app/morven.js"></script>
+<script>
+// ── MorvenWallet Integration ─────────────────────────────────────────────
+let _mrvJwt = null;
+
+function toggleMrvPaySection(method) {
+  const mrvSec = document.getElementById('mrv-pay-section');
+  const refSec = document.getElementById('ref-pay-section');
+  if (method === 'mrv') {
+    mrvSec.style.display = 'block';
+    refSec.style.display = 'none';
+    loadMrvBalance();
+  } else {
+    mrvSec.style.display = 'none';
+    refSec.style.display = 'block';
+  }
+}
+
+async function loadMrvBalance() {
+  const el = document.getElementById('mrv-balance-display');
+  const storedJwt = _mrvJwt || (typeof morvenWallet !== 'undefined' && morvenWallet.getJwt());
+  if (!storedJwt) { el.textContent = 'Connect wallet to see balance'; return; }
+  try {
+    const bal = await morvenWallet.getBalance(storedJwt);
+    el.textContent = `Balance: ${bal.mrv.toFixed(2)} MRV (~$${bal.usd_value?.toFixed(2) || '0'})`;
+  } catch(e) { el.textContent = 'Could not load balance'; }
+}
+
+async function connectMrvWallet() {
+  const btn = document.getElementById('mrv-connect-btn');
+  const info = document.getElementById('mrv-connected-info');
+  btn.disabled = true; btn.textContent = 'Connecting...';
+  try {
+    const result = await morvenWallet.login();
+    _mrvJwt = result.jwt;
+    const bal = await morvenWallet.getBalance(_mrvJwt).catch(() => ({ mrv: 0 }));
+    info.style.display = 'block';
+    info.textContent = '✅ Connected: ' + (result.user?.display_name || result.user?.email || 'Wallet');
+    document.getElementById('mrv-balance-display').textContent = `Balance: ${bal.mrv.toFixed(2)} MRV`;
+    btn.textContent = '✓ Connected';
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Connect MorvenWallet';
+    toast(e.message || 'Connection failed', 'er');
+  }
+}
+
+const _origSubmitPayment = submitPayment;
+async function submitPayment() {
+  const method = document.getElementById('pay-method').value;
+  if (method !== 'mrv') { _origSubmitPayment(); return; }
+  if (!_mrvJwt) { toast('Please connect your MorvenWallet first', 'er'); return; }
+  const plan = document.getElementById('pay-plan').value;
+  const r = await fetch('/api/payments/mrv', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._ff_token || ''), 'X-Mrv-Token': _mrvJwt },
+    body: JSON.stringify({ plan, mrv_jwt: _mrvJwt })
+  });
+  const d = await r.json(); cAll();
+  if (d.success) { toast(`Upgraded to ${plan} — ${d.mrv_spent} MRV spent ✅`, 'ok'); setTimeout(() => location.reload(), 1500); }
+  else toast(d.error || 'MRV payment failed', 'er');
 }
 </script>
 </body>
