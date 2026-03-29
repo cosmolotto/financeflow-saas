@@ -234,7 +234,7 @@ tr:hover td{background:rgba(255,255,255,0.01)}
         <div class="sc c0"><div class="sl">Total Videos</div><div class="sv" id="s-total">{{ stats.total }}</div><div class="ss">Generated</div></div>
         <div class="sc c1"><div class="sl">Uploaded</div><div class="sv" id="s-up">{{ stats.uploaded }}</div><div class="ss">Live on YouTube</div></div>
         <div class="sc c2"><div class="sl">Channels</div><div class="sv">{{ stats.channels }}</div><div class="ss">Connected</div></div>
-        <div class="sc c3"><div class="sl">In Queue</div><div class="sv" id="s-pend">{{ stats.pending }}</div><div class="ss">Processing</div></div>
+        <div class="sc c3"><div class="sl">In Queue</div><div class="sv" id="s-pend">{{ stats.pending }}</div><div class="ss">{% if stats.failed %}<span style="color:var(--red)">{{ stats.failed }} failed</span>{% else %}Processing{% endif %}</div></div>
       </div>
       <div class="sh"><div class="st">Your Channels</div><button class="btn bg sm" onclick="connectCh()">＋ Connect Channel</button></div>
       <div class="cg">
@@ -1146,7 +1146,7 @@ function setTx(id,val){const e=document.getElementById(id);if(e)e.textContent=va
 
 async function poll(){
   try{const r=await fetch('/api/queue/status');const d=await r.json();
-    if(d.stats){setTx('s-total',d.stats.total);setTx('s-up',d.stats.uploaded);setTx('s-pend',d.stats.pending);}
+    if(d.stats){setTx('s-total',d.stats.total);setTx('s-up',d.stats.uploaded);setTx('s-pend',d.stats.pending);const fe=document.querySelector('#s-pend+.ss,.sc.c3 .ss');if(fe&&d.stats.failed){fe.innerHTML=`<span style="color:var(--red)">${d.stats.failed} failed — <a href="#" onclick="sp('queue');return false" style="color:var(--red)">retry →</a></span>`;}}
     const active=(d.queue||[]).filter(q=>['pending','processing'].includes(q.status));
     const badge=document.getElementById('qb');if(badge){badge.textContent=active.length;badge.style.display=active.length>0?'inline':'none';}
     setEl('ov-q',active.length?active.map(mkQI).join(''):'<div class="em" style="padding:24px"><div class="ei">✅</div><h4>Queue empty</h4><p>Generate a video to start</p></div>');

@@ -2897,10 +2897,14 @@ def queue_status():
         "SELECT COUNT(*) FROM queue WHERE user_id=? AND status='pending'",
         (request.uid,
          )).fetchone()[0]
+    failed = db.execute(
+        "SELECT COUNT(*) FROM queue WHERE user_id=? AND status='failed'",
+        (request.uid,
+         )).fetchone()[0]
     return jsonify({
         "queue": [dict(r) for r in q_rows],
         "videos": [dict(r) for r in v_rows],
-        "stats": {"total": total, "uploaded": uploaded, "pending": pending},
+        "stats": {"total": total, "uploaded": uploaded, "pending": pending, "failed": failed},
         "worker_online": worker_online_status(),
     })
 
