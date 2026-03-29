@@ -555,13 +555,35 @@ def make_frames(sd, dur, fdir, vtype, bg_path=None):
         for gy in range(0, H, 40):
             dd.ellipse([gx - 1, gy - 1, gx + 1, gy + 1], fill=dot_col)
 
-    # Build sparkline data (animated line chart)
-    n_points = 16
-    spark_vals = [0.3 + 0.5 * abs(math.sin(i * 1.3 + 0.7)) for i in range(n_points)]
-    # Make it trend upward
-    spark_vals = [v + i * 0.022 for i, v in enumerate(spark_vals)]
-    spark_max = max(spark_vals)
-    spark_vals = [v / spark_max for v in spark_vals]
+    # Build sparkline data — niche-specific realistic chart patterns
+    n_points = 20
+    rng_seed = sum(ord(c) for c in (sd.get("title", "") or niche))
+    _rng = random.Random(rng_seed)  # deterministic per video
+
+    if niche in ("crypto",):
+        # Volatile: large swings, overall uptrend with a correction dip
+        base = [_rng.gauss(0, 0.18) for _ in range(n_points)]
+        trend = [i * 0.04 for i in range(n_points)]
+        dip_start = int(n_points * 0.55)
+        dip = [max(0, 0.4 * math.exp(-0.6 * abs(i - dip_start))) for i in range(n_points)]
+        spark_vals = [0.3 + b + t - d for b, t, d in zip(base, trend, dip)]
+    elif niche in ("real_estate",):
+        # Slow steady climb with minor bumps
+        spark_vals = [0.35 + i * 0.032 + _rng.gauss(0, 0.04) for i in range(n_points)]
+    elif niche in ("side_hustle",):
+        # Hockey stick: flat then rapid growth
+        spark_vals = [0.2 + _rng.gauss(0, 0.03) if i < n_points * 0.6
+                      else 0.25 + (i - n_points * 0.6) * 0.09 + _rng.gauss(0, 0.04)
+                      for i in range(n_points)]
+    else:
+        # Personal finance / investing: compound growth curve + small noise
+        spark_vals = [0.2 + 0.7 * (1 - math.exp(-i * 0.18)) + _rng.gauss(0, 0.025)
+                      for i in range(n_points)]
+
+    # Normalize to [0.05, 0.95]
+    sv_min, sv_max = min(spark_vals), max(spark_vals)
+    sv_range = sv_max - sv_min if sv_max != sv_min else 1
+    spark_vals = [0.05 + 0.90 * (v - sv_min) / sv_range for v in spark_vals]
 
     cd = dur / max(len(lines), 1)
 
@@ -618,15 +640,26 @@ def make_frames(sd, dur, fdir, vtype, bg_path=None):
                 py = int(py + pulse)
             pts.append((px, py))
         if len(pts) >= 2:
-            # Gradient line effect (draw twice with offset for glow)
+            # Area fill under the line (semi-transparent)
+            chart_bottom = chart_y + chart_h + 4
+            fill_poly = pts + [(pts[-1][0], chart_bottom), (pts[0][0], chart_bottom)]
+            fill_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            fill_draw = ImageDraw.Draw(fill_overlay)
+            fill_draw.polygon(fill_poly, fill=(*a, 28))
+            img = Image.alpha_composite(img.convert("RGBA"), fill_overlay).convert("RGB")
+            draw = ImageDraw.Draw(img)
+
+            # Gradient line effect (glow + main line)
             glow = (min(255, a[0] + 40), min(255, a[1] + 40), min(255, a[2] + 40))
-            for dx_off, lw, col in [(-1, 3, (*a, 60)), (0, 2, a), (0, 1, glow)]:
+            for dx_off, lw, col in [(-1, 4, (*a, 55)), (0, 2, a), (0, 1, glow)]:
                 off_pts = [(x + dx_off, y) for x, y in pts]
                 if len(off_pts) >= 2:
                     draw.line(off_pts, fill=col if len(col) == 3 else col[:3], width=lw)
-            # Dot at latest point
+            # Dot at latest point with outer ring
             lx, ly = pts[-1]
-            dot_r = 5
+            dot_r = 6
+            draw.ellipse([lx - dot_r - 2, ly - dot_r - 2, lx + dot_r + 2, ly + dot_r + 2],
+                         fill=(*a, 60) if len(a) == 3 else a)
             draw.ellipse([lx - dot_r, ly - dot_r, lx + dot_r, ly + dot_r], fill=a)
             draw.ellipse([lx - 2, ly - 2, lx + 2, ly + 2], fill=(255, 255, 255))
 
