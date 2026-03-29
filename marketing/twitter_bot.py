@@ -11,7 +11,7 @@ import os
 import random
 import tweepy
 
-APP_URL = "https://financeflow-saas.vercel.app"
+APP_URL = "https://vercel-financeflow.vercel.app"
 
 DAILY_TIPS = [
     "YouTube finance channels earn $8–25 CPM vs $1–3 for entertainment. The math is simple: same views, 10x the revenue. Niche down into personal finance, investing, or crypto. 📊",

@@ -15,7 +15,7 @@ import json
 import random
 from datetime import datetime
 
-APP_URL = "https://financeflow-saas.vercel.app"
+APP_URL = "https://vercel-financeflow.vercel.app"
 APP_NAME = "FinanceFlow"
 
 MONITOR_SUBS = [
