@@ -390,8 +390,12 @@ tr:hover td{background:rgba(255,255,255,0.01)}
           {% if plan.custom_prompts %}
           <div class="fd"><label>Custom Title <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="text" id="gen-title" placeholder="Leave blank for AI"></div>
           <div class="fd">
-            <label>Your Prompt ✨ <span style="background:rgba(255,215,0,0.15);color:var(--gold);font-size:10px;padding:2px 7px;border-radius:100px;font-weight:700;margin-left:4px">{% if is_admin %}ADMIN{% else %}PRO{% endif %}</span></label>
+            <label style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+              <span>Your Prompt ✨ <span style="background:rgba(255,215,0,0.15);color:var(--gold);font-size:10px;padding:2px 7px;border-radius:100px;font-weight:700;margin-left:4px">{% if is_admin %}ADMIN{% else %}PRO{% endif %}</span></span>
+              <button class="btn bo sm" id="page-suggest-btn" onclick="pagesuggestTopics()" style="font-size:11px;padding:3px 10px">💡 Suggest Topics</button>
+            </label>
             <textarea id="gen-prompt" rows="4" placeholder="Example: Make a video about why 25-year-olds should start investing NOW. Compare $200/month at age 25 vs 35. Keep it motivating and slightly urgent for beginners."></textarea>
+            <div id="page-suggest-list" style="display:none;margin-top:7px"></div>
             <div class="fn">The worker speaks this script word-for-word and builds the full video around it.</div>
           </div>
           <div style="margin-bottom:14px"><button class="btn bo sm" onclick="sp('prompts')">📚 Load saved prompt</button></div>
@@ -908,6 +912,42 @@ async function submitGM(){
   const prompt=IS_PRO?(document.getElementById('gm-p')?.value||''):'';const title=IS_PRO?(document.getElementById('gm-title')?.value||''):'';
   cAll();const r=await fetch('/api/videos/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel_id:ch,type,custom_prompt:prompt,custom_title:title})});
   const d=await r.json();if(d.success){toast(d.message,'ok');sp('queue');setTimeout(poll,500);}else toast(d.error,'er');
+}
+async function pagesuggestTopics(){
+  const btn=document.getElementById('page-suggest-btn');
+  const list=document.getElementById('page-suggest-list');
+  const promptEl=document.getElementById('gen-prompt');
+  // Get niche from first checked channel checkbox
+  let niche='personal_finance', vtype=document.getElementById('gen-type')?.value||'short';
+  const checked=document.querySelector('.gen-ch-cb:checked');
+  if(checked){
+    const row=checked.closest('label');
+    const tg=row?.querySelector('.tg');
+    if(tg) niche=tg.textContent.toLowerCase().replace(/ /g,'_');
+  }
+  btn.disabled=true; btn.textContent='⏳ Loading...';
+  list.style.display='none';
+  try{
+    const r=await fetch('/api/channels/suggest-topics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({niche,video_type:vtype})});
+    const d=await r.json();
+    if(d.topics&&d.topics.length){
+      while(list.firstChild)list.removeChild(list.firstChild);
+      const label=document.createElement('div');
+      label.style.cssText='font-size:11px;color:var(--muted);margin-bottom:5px';
+      label.textContent='Click a topic to use it as your prompt:';
+      list.appendChild(label);
+      d.topics.forEach(topic=>{
+        const b=document.createElement('button');
+        b.className='btn bo sm';
+        b.style.cssText='display:block;width:100%;text-align:left;margin-bottom:4px;font-size:12px;padding:6px 10px';
+        b.textContent=topic;
+        b.onclick=function(){promptEl.value=topic;list.style.display='none';};
+        list.appendChild(b);
+      });
+      list.style.display='block';
+    } else toast('No topics returned','er');
+  }catch(e){toast('Could not fetch suggestions','er');}
+  btn.disabled=false; btn.textContent='💡 Suggest Topics';
 }
 async function suggestTopics(){
   const btn=document.getElementById('suggest-btn');
