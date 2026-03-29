@@ -827,6 +827,30 @@ def make_thumb(sd, out, vtype):
         text_col = (255, 255, 255) if brightness < 160 else a
         draw.text((W // 2, ty), ln, fill=text_col, font=fnt(tsz), anchor="mm")
 
+    # Small decorative sparkline above CTA bar
+    spark_seed = sum(ord(ch) for ch in title_text[:10])
+    _rng_t = random.Random(spark_seed)
+    sp_n = 12
+    if niche == "crypto":
+        sp_vals = [0.3 + _rng_t.gauss(0, 0.15) + i * 0.04 for i in range(sp_n)]
+    elif niche == "real_estate":
+        sp_vals = [0.2 + i * 0.055 + _rng_t.gauss(0, 0.02) for i in range(sp_n)]
+    else:
+        sp_vals = [0.2 + 0.7 * (1 - math.exp(-i * 0.3)) + _rng_t.gauss(0, 0.02) for i in range(sp_n)]
+    sp_min, sp_max = min(sp_vals), max(sp_vals)
+    sp_range = sp_max - sp_min if sp_max != sp_min else 1
+    sp_vals = [0.1 + 0.8 * (v - sp_min) / sp_range for v in sp_vals]
+    sp_h = 44 if vtype == "short" else 36
+    sp_y = H - 110 if vtype == "short" else H - 100
+    sp_x0, sp_x1 = int(W * 0.1), int(W * 0.9)
+    sp_w = sp_x1 - sp_x0
+    sp_pts = [(sp_x0 + int(i * sp_w / (sp_n - 1)), sp_y + sp_h - int(v * sp_h))
+              for i, v in enumerate(sp_vals)]
+    if len(sp_pts) >= 2:
+        draw.line(sp_pts, fill=(*a, 120) if len(a) == 3 else a, width=3)
+        lx2, ly2 = sp_pts[-1]
+        draw.ellipse([lx2 - 4, ly2 - 4, lx2 + 4, ly2 + 4], fill=a)
+
     # Subscribe CTA bar at bottom
     draw.rectangle([0, H - 80, W, H], fill=(0, 0, 0))
     draw.rectangle([0, H - 80, W, H - 76], fill=a)
