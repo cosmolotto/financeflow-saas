@@ -1163,11 +1163,18 @@ function esc(s){const d=document.createElement('div');d.textContent=String(s||''
 function buildAnalyticsDOM(d){
   const el=document.getElementById('analytics-content');
   el.textContent='';
-  const t=d.totals||{};
+  const raw=d.totals||{};
+  // Normalize both API shapes: old (total/uploaded/failed) and new (videos_generated/videos_uploaded/videos_failed)
+  const t={
+    total: raw.total||raw.videos_generated||0,
+    uploaded: raw.uploaded||raw.videos_uploaded||0,
+    failed: raw.failed||raw.videos_failed||0,
+    processing: raw.processing||0,
+  };
 
   // Stat grid
   const sg=document.createElement('div');sg.className='sg';sg.style.marginBottom='22px';
-  [['c0','Total Generated',t.total||0,'All time'],['c1','Uploaded',t.uploaded||0,'Live on YouTube'],['c2','Processing',t.processing||0,'In progress'],['c3','Failed',t.failed||0,'Need retry']].forEach(([cls,label,val,sub])=>{
+  [['c0','Total Generated',t.total,'All time'],['c1','Uploaded',t.uploaded,'Live on YouTube'],['c2','Processing',t.processing,'In progress'],['c3','Failed',t.failed,'Need retry']].forEach(([cls,label,val,sub])=>{
     const sc=document.createElement('div');sc.className=`sc ${cls}`;
     const sl=document.createElement('div');sl.className='sl';sl.textContent=label;
     const sv=document.createElement('div');sv.className='sv';sv.textContent=val;
@@ -1190,7 +1197,7 @@ function buildAnalyticsDOM(d){
       const sub=document.createElement('div');sub.style.cssText='font-size:11px;color:var(--muted)';sub.textContent=`${c.niche||'—'} · ${c.video_type||'—'}`;
       info.append(nm,sub);
       const vc=document.createElement('div');vc.style.textAlign='right';
-      const vn=document.createElement('div');vn.style.cssText="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--gold)";vn.textContent=c.total_videos||0;
+      const vn=document.createElement('div');vn.style.cssText="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--gold)";vn.textContent=c.total_videos||c.videos_uploaded||0;
       const vs=document.createElement('div');vs.style.cssText='font-size:11px;color:var(--muted)';vs.textContent='videos';
       vc.append(vn,vs);row.append(info,vc);cw.appendChild(row);
     });
