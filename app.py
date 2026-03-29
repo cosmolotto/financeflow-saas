@@ -1905,8 +1905,10 @@ def generate_video():
     # Backwards compat: return single job_id if only one channel
     if len(job_ids) == 1:
         return jsonify({"success": True, "job_id": job_ids[0], "job_ids": job_ids,
+                       "message": "Added to queue! Check the Queue tab for progress.",
                        "status": "queued", "queue": "celery" if celery_app else "sqlite"})
     return jsonify({"success": True, "job_ids": job_ids, "channels": len(job_ids),
+                   "message": f"Queued for {len(job_ids)} channels! Check the Queue tab.",
                    "status": "queued", "queue": "celery" if celery_app else "sqlite"})
 
 
