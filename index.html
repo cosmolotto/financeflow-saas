@@ -409,6 +409,9 @@ footer p{color:var(--muted);font-size:14px}
 </div>
 
 <script>
+// Auto-detect API backend: when served from Vercel, point to Render
+const API_BASE = (window.location.hostname.includes('onrender.com') || window.location.hostname === 'localhost' || window.location.hostname.includes('railway.app')) ? '' : 'https://financeflow-saas.onrender.com';
+function apiUrl(path) { return API_BASE + path; }
 function openModal(tab) {
   document.getElementById('authModal').classList.add('active');
   document.body.style.overflow = 'hidden';
@@ -441,7 +444,7 @@ async function register() {
   if (!password || password.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = 'Creating account…';
   try {
-    const res = await fetch('/api/auth/register', {
+    const res = await fetch(apiUrl('/api/auth/register'), {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({full_name: name, email, password, ref: new URLSearchParams(window.location.search).get('ref') || ''})
@@ -450,7 +453,7 @@ async function register() {
     if (data.error) { err.textContent = data.error; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account →'; return; }
     if (data.token) localStorage.setItem('ff_token', data.token);
     const dest = data.redirect || '/dashboard';
-    window.location.href = dest + (dest.includes('?') ? '&' : '?') + '_t=' + encodeURIComponent(data.token || '');
+    const fullDest = API_BASE && !dest.startsWith('http') ? API_BASE + dest : dest; window.location.href = fullDest + (fullDest.includes('?') ? '&' : '?') + '_t=' + encodeURIComponent(data.token || '');
   } catch(e) { err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Create Free Account →'; }
 }
 async function loginUser() {
@@ -463,7 +466,7 @@ async function loginUser() {
   if (!password) { err.textContent = 'Enter your password.'; err.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = 'Logging in…';
   try {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(apiUrl('/api/auth/login'), {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({email, password})
@@ -472,7 +475,7 @@ async function loginUser() {
     if (data.error) { err.textContent = data.error; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Login →'; return; }
     if (data.token) localStorage.setItem('ff_token', data.token);
     const dest = data.redirect || '/dashboard';
-    window.location.href = dest + (dest.includes('?') ? '&' : '?') + '_t=' + encodeURIComponent(data.token || '');
+    const fullDest = API_BASE && !dest.startsWith('http') ? API_BASE + dest : dest; window.location.href = fullDest + (fullDest.includes('?') ? '&' : '?') + '_t=' + encodeURIComponent(data.token || '');
   } catch(e) { err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Login →'; }
 }
 document.getElementById('authModal').addEventListener('click', function(e) {
@@ -524,7 +527,7 @@ async function doReset(token) {
   err.style.display = 'none'; ok.style.display = 'none';
   if (!pw || pw.length < 6) { err.textContent = 'Password must be 6+ characters'; err.style.display = 'block'; return; }
   try {
-    var r = await fetch('/api/auth/reset-password', {
+    var r = await fetch(apiUrl('/api/auth/reset-password'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({token: token, password: pw})
@@ -558,7 +561,7 @@ async function doForgot() {
   const okEl = document.getElementById('forgotSuccess');
   errEl.style.display='none'; okEl.style.display='none';
   if (!email) { errEl.textContent='Enter your email'; errEl.style.display='block'; return; }
-  const r = await fetch('/api/auth/forgot-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+  const r = await fetch(apiUrl('/api/auth/forgot-password'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
   const d = await r.json();
   if (d.status) {
     okEl.innerHTML = '✅ ' + d.status;
@@ -571,7 +574,7 @@ async function doForgot() {
 // Live stats from DB
 (async function loadPublicStats() {
   try {
-    const r = await fetch('/api/stats/public');
+    const r = await fetch(apiUrl('/api/stats/public'));
     if (!r.ok) return;
     const d = await r.json();
     if (d.users != null) {
