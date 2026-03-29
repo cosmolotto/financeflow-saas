@@ -1521,6 +1521,135 @@ def channel_callback():
 # ── Channel API ─────────────────────────────────────────────────────────
 
 
+@app.route("/api/channels/setup-guide")
+@login_required
+def channel_setup_guide():
+    """Step-by-step guide to create and connect a YouTube channel."""
+    db = get_db()
+    has_channels = db.execute(
+        "SELECT COUNT(*) FROM channels WHERE user_id=? AND active=1", (request.uid,)
+    ).fetchone()[0]
+
+    steps = [
+        {
+            "step": 1,
+            "title": "Create a Google Account",
+            "description": "You need a Google account to create a YouTube channel. If you already have Gmail, you're ready.",
+            "action_label": "Sign up for Google",
+            "action_url": "https://accounts.google.com/signup",
+            "done_check": "Do you have a Google account?",
+            "tips": ["Use a dedicated account for your channel for better separation", "Choose an email that reflects your brand"]
+        },
+        {
+            "step": 2,
+            "title": "Create Your YouTube Channel",
+            "description": "Go to YouTube and create a Brand Account channel. Brand accounts let multiple people manage the channel.",
+            "action_label": "Create Channel on YouTube",
+            "action_url": "https://www.youtube.com/create_channel",
+            "done_check": "Have you created your YouTube channel?",
+            "tips": [
+                "Choose 'Use a custom name' for a Brand Account (recommended)",
+                "Pick a niche-specific channel name like 'SmartMoneyTips' or 'CryptoSimplified'",
+                "Add a profile picture and channel banner before connecting"
+            ]
+        },
+        {
+            "step": 3,
+            "title": "Set Up Your Channel Profile",
+            "description": "Before connecting, optimize your channel for growth.",
+            "action_label": "Open YouTube Studio",
+            "action_url": "https://studio.youtube.com",
+            "done_check": "Is your channel profile complete?",
+            "tips": [
+                "Channel name: use your niche keyword (e.g. 'Finance In 60 Seconds')",
+                "Description: include keywords like 'personal finance tips', 'investing for beginners'",
+                "Profile picture: clean logo or face — 800x800px PNG",
+                "Banner: 2560x1440px — FinanceFlow can generate these"
+            ]
+        },
+        {
+            "step": 4,
+            "title": "Enable YouTube API Access",
+            "description": "FinanceFlow needs permission to upload videos to your channel. This is done via Google OAuth — you'll be redirected to Google's secure login.",
+            "action_label": "Connect to FinanceFlow",
+            "action_url": f"{APP_URL}/api/channels/connect",
+            "done_check": "Have you connected your channel?",
+            "tips": [
+                "You'll see 'FinanceFlow wants to manage your YouTube account'",
+                "Grant permission — FinanceFlow only uploads videos, it cannot delete or access private data",
+                "You can revoke access anytime from myaccount.google.com/permissions"
+            ]
+        },
+        {
+            "step": 5,
+            "title": "Configure Your Channel Settings",
+            "description": "Set your niche, video type (Shorts or long-form), and posting schedule.",
+            "action_label": "Open Dashboard",
+            "action_url": f"{APP_URL}/dashboard",
+            "done_check": "Have you configured your channel?",
+            "tips": [
+                "Start with Shorts — they grow channels 3x faster in the first 6 months",
+                "Pick one niche and stick to it: Personal Finance, Crypto, Real Estate, or Side Hustle",
+                "Daily posting gets you to monetization fastest — set autopilot once connected"
+            ]
+        }
+    ]
+
+    return jsonify({
+        "has_channels": bool(has_channels),
+        "current_step": 4 if has_channels else 1,
+        "steps": steps,
+        "connect_url": f"{APP_URL}/api/channels/connect",
+        "dashboard_url": f"{APP_URL}/dashboard",
+        "niche_options": [
+            {"key": "personal_finance", "label": "Personal Finance", "description": "Budgeting, investing, saving — highest CPM niche on YouTube"},
+            {"key": "crypto", "label": "Crypto & Bitcoin", "description": "Cryptocurrency education — fast growing, high engagement"},
+            {"key": "real_estate", "label": "Real Estate", "description": "Property investing — high-value audience, strong CPM"},
+            {"key": "side_hustle", "label": "Side Hustle & Income", "description": "Extra income ideas — very viral, broad audience"},
+        ],
+        "monetization_requirements": {
+            "subscribers": 1000,
+            "watch_hours": 4000,
+            "shorts_views": 10000000,
+            "estimated_days_with_autopilot": "60-120 days (1 short per day)",
+            "estimated_monthly_revenue": "$200-$2000 at monetization (depends on niche and views)"
+        }
+    })
+
+
+@app.route("/api/channels/preflight")
+@login_required
+def channel_preflight():
+    """Pre-flight check before connecting a channel — validates API keys are set."""
+    checks = {
+        "google_oauth": bool(CLIENT_ID and CLIENT_SECRET),
+        "openai_scripts": bool(OPENAI_KEY),
+        "elevenlabs_voice": bool(ELEVENLABS_KEY),
+        "ffmpeg": False,
+        "worker_online": worker_online_status(),
+    }
+    import shutil
+    checks["ffmpeg"] = bool(shutil.which("ffmpeg"))
+
+    ready = checks["google_oauth"] and checks["worker_online"]
+    warnings = []
+    if not checks["openai_scripts"]:
+        warnings.append("OPENAI_API_KEY not set — will use built-in scripts instead of AI-generated ones")
+    if not checks["elevenlabs_voice"]:
+        warnings.append("ELEVENLABS_API_KEY not set — will use free Edge TTS voice (good quality)")
+    if not checks["ffmpeg"]:
+        warnings.append("ffmpeg not found — video rendering may fail")
+    if not checks["worker_online"]:
+        warnings.append("Worker process is not running — videos cannot be generated until worker.py is started")
+
+    return jsonify({
+        "ready": ready,
+        "checks": checks,
+        "warnings": warnings,
+        "setup_guide_url": f"{APP_URL}/api/channels/setup-guide"
+    })
+
+
 @app.route("/api/channels")
 @login_required
 def get_channels():

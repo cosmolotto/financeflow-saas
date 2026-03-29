@@ -384,119 +384,424 @@ def get_duration(wav):
         with wave.open(wav) as w: return w.getnframes()/w.getframerate()
     except: return 45.0
 
-def make_music(out,dur=60):
-    sr=44100
-    chords=[[261.63,329.63,392],[392,493.88,587.33],[220,261.63,329.63],[349.23,440,523.25]]
-    frames=[]
-    for i in range(sr*int(dur+2)):
-        t=i/sr; ci=int(t*0.5)%len(chords); pos=(t*0.5)%1
-        env=min(pos/0.1,1,(1-pos)/0.1); master=min(t/0.5,1,(dur-t)/0.5)
-        s=sum(0.09*math.sin(2*math.pi*f*t+j*0.1) for j,f in enumerate(chords[ci]))
-        bass=0.06*math.sin(2*math.pi*chords[ci][0]*0.5*t)
-        beat=(t*120/60)%1
-        kick=0.12*(1-beat/0.04)*math.sin(2*math.pi*55*t) if beat<0.04 else 0
-        hh=0.03*random.gauss(0,1) if beat<0.02 or 0.5<=beat<0.52 else 0
-        val=int((s*env+bass+kick+hh)*master*20000)
-        frames.append(struct.pack('<h',max(-32767,min(32767,val))))
-    with wave.open(out,'w') as wf:
-        wf.setnchannels(1);wf.setsampwidth(2);wf.setframerate(sr);wf.writeframes(b''.join(frames))
+def make_music(out, dur=60):
+    """Generate motivational background music with proper chord progression and stereo mix."""
+    sr = 44100
+    # I-V-vi-IV progression in C major (440Hz tuning)
+    # Each chord is [root, third, fifth, octave]
+    chord_freqs = [
+        [261.63, 329.63, 392.00, 523.25],   # C major
+        [392.00, 493.88, 587.33, 784.00],   # G major
+        [220.00, 261.63, 329.63, 440.00],   # A minor
+        [349.23, 440.00, 523.25, 698.46],   # F major
+    ]
+    bass_notes  = [130.81, 196.00, 110.00, 174.61]  # bass octave
+    beat_period = 60.0 / 120  # 120 BPM
+    chord_dur   = 2.0  # 2 seconds per chord
 
-def make_frames(sd,dur,fdir,vtype,bg_path=None):
-    os.makedirs(fdir,exist_ok=True)
-    W,H=(540,960) if vtype=="short" else (960,540)
-    FPS=12; c,a=sd["color"],sd["accent"]; lines=sd["lines"]
-    niche=sd.get("niche","personal_finance")
-    theme=NICHE_THEMES.get(niche,{"bg":(8,8,8),"bg2":(25,18,4),"grid":(35,28,8)})
-    nf=int(dur*FPS)
-    MAX_FRAMES = 150
+    frames_l = []
+    frames_r = []
+    total_samples = sr * int(dur + 2)
+
+    for i in range(total_samples):
+        t = i / sr
+        ci = int(t / chord_dur) % len(chord_freqs)
+        chord = chord_freqs[ci]
+        pos_in_chord = (t % chord_dur) / chord_dur
+
+        # Master volume fade in/out
+        master = min(t / 0.8, 1.0, (dur - t) / 0.8)
+
+        # Chord envelope (soft attack, sustain, slight release at end of chord)
+        env = min(pos_in_chord / 0.06, 1.0, 1.0 - max(0, pos_in_chord - 0.85) / 0.15)
+
+        # Pad sound: 4-voice chord with slight detuning for width
+        pad_l = sum(0.07 * math.sin(2 * math.pi * f * t * (1 + 0.001 * (j % 2 == 0 and 1 or -1)))
+                    for j, f in enumerate(chord))
+        pad_r = sum(0.07 * math.sin(2 * math.pi * f * t * (1 + 0.001 * (j % 2 == 1 and 1 or -1)))
+                    for j, f in enumerate(chord))
+
+        # Bass: root + octave, punchy
+        bass_f = bass_notes[ci]
+        bass_env = min(pos_in_chord / 0.02, 1.0) * math.exp(-pos_in_chord * 2.5)
+        bass = 0.18 * math.sin(2 * math.pi * bass_f * t) * bass_env
+        bass += 0.06 * math.sin(2 * math.pi * bass_f * 2 * t) * bass_env
+
+        # Kick drum (4 on the floor)
+        beat_pos = (t / beat_period) % 1.0
+        kick_env = math.exp(-beat_pos * 18) if beat_pos < 0.25 else 0
+        kick_freq = 55 + 180 * math.exp(-beat_pos * 30)
+        kick = 0.22 * math.sin(2 * math.pi * kick_freq * t) * kick_env
+
+        # Snare on beats 2 and 4
+        snare_beat = (t / beat_period + 0.5) % 1.0  # offset by half beat
+        snare_on = (int(t / beat_period) % 2 == 1)
+        snare_env = math.exp(-snare_beat * 22) if snare_beat < 0.15 and snare_on else 0
+        snare = snare_env * (0.08 * random.gauss(0, 1) + 0.04 * math.sin(2 * math.pi * 200 * t))
+
+        # Hi-hat (8th notes)
+        hh_beat = (t / (beat_period / 2)) % 1.0
+        hh_env = math.exp(-hh_beat * 30) if hh_beat < 0.12 else 0
+        hh = 0.025 * random.gauss(0, 1) * hh_env
+
+        # Mix (pad stereo, drums mono center)
+        drums = kick + snare + hh
+        left  = (pad_l * env + bass + drums) * master
+        right = (pad_r * env + bass + drums) * master
+
+        # Soft clip / limiter
+        def clip(x):
+            return math.tanh(x * 1.4) * 0.72
+
+        frames_l.append(struct.pack('<h', max(-32767, min(32767, int(clip(left) * 28000)))))
+        frames_r.append(struct.pack('<h', max(-32767, min(32767, int(clip(right) * 28000)))))
+
+    # Interleave stereo samples L R L R
+    interleaved = b''.join(l + r for l, r in zip(frames_l, frames_r))
+    with wave.open(out, 'w') as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(interleaved)
+
+def _draw_rounded_rect(draw, xy, radius, fill, outline=None, outline_width=2):
+    """Draw a rounded rectangle using PIL primitives."""
+    x0, y0, x1, y1 = xy
+    r = min(radius, (x1 - x0) // 2, (y1 - y0) // 2)
+    draw.rectangle([x0 + r, y0, x1 - r, y1], fill=fill)
+    draw.rectangle([x0, y0 + r, x1, y1 - r], fill=fill)
+    draw.ellipse([x0, y0, x0 + 2*r, y0 + 2*r], fill=fill)
+    draw.ellipse([x1 - 2*r, y0, x1, y0 + 2*r], fill=fill)
+    draw.ellipse([x0, y1 - 2*r, x0 + 2*r, y1], fill=fill)
+    draw.ellipse([x1 - 2*r, y1 - 2*r, x1, y1], fill=fill)
+    if outline:
+        draw.arc([x0, y0, x0 + 2*r, y0 + 2*r], 180, 270, fill=outline, width=outline_width)
+        draw.arc([x1 - 2*r, y0, x1, y0 + 2*r], 270, 360, fill=outline, width=outline_width)
+        draw.arc([x0, y1 - 2*r, x0 + 2*r, y1], 90, 180, fill=outline, width=outline_width)
+        draw.arc([x1 - 2*r, y1 - 2*r, x1, y1], 0, 90, fill=outline, width=outline_width)
+        draw.line([x0 + r, y0, x1 - r, y0], fill=outline, width=outline_width)
+        draw.line([x0 + r, y1, x1 - r, y1], fill=outline, width=outline_width)
+        draw.line([x0, y0 + r, x0, y1 - r], fill=outline, width=outline_width)
+        draw.line([x1, y0 + r, x1, y1 - r], fill=outline, width=outline_width)
+
+
+def _gradient_rect(img, x0, y0, x1, y1, color_top, color_bot):
+    """Draw a vertical gradient rectangle directly onto image pixels."""
+    draw = ImageDraw.Draw(img)
+    h = y1 - y0
+    for dy in range(h):
+        ratio = dy / max(h - 1, 1)
+        r = int(color_top[0] + (color_bot[0] - color_top[0]) * ratio)
+        g = int(color_top[1] + (color_bot[1] - color_top[1]) * ratio)
+        b = int(color_top[2] + (color_bot[2] - color_top[2]) * ratio)
+        draw.line([(x0, y0 + dy), (x1, y0 + dy)], fill=(
+            max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b))))
+
+
+def make_frames(sd, dur, fdir, vtype, bg_path=None):
+    from PIL import ImageFilter
+    os.makedirs(fdir, exist_ok=True)
+    W, H = (540, 960) if vtype == "short" else (960, 540)
+    FPS = 24
+    c, a = sd["color"], sd["accent"]
+    lines = sd["lines"]
+    niche = sd.get("niche", "personal_finance")
+    theme = NICHE_THEMES.get(niche, {"bg": (8, 8, 8), "bg2": (25, 18, 4), "grid": (35, 28, 8)})
+
+    nf = int(dur * FPS)
+    MAX_FRAMES = 240  # 10s at 24fps = 240 frames max
     step = max(1, nf // MAX_FRAMES) if nf > MAX_FRAMES else 1
     frame_indices = list(range(0, nf, step))[:MAX_FRAMES]
     actual_nf = len(frame_indices)
     if nf > MAX_FRAMES:
-        print(f"   [FRAMES] Sampling {nf} → {actual_nf} frames (step={step}) to reduce memory")
-    # Load AI background image if available
+        print(f"   [FRAMES] Sampling {nf} → {actual_nf} frames (step={step})")
+
+    # Pre-build base background (gradient + vignette) once and reuse
+    bg_base = Image.new("RGB", (W, H))
+    # Rich gradient: top slightly lighter, bottom darker
+    bg2 = theme["bg2"]
+    _gradient_rect(bg_base, 0, 0, W, H,
+                   (max(0, c[0] + 15), max(0, c[1] + 10), max(0, c[2] + 20)),
+                   (max(0, bg2[0] - 5), max(0, bg2[1] - 5), max(0, bg2[2] - 5)))
+
+    # Vignette overlay (dark edges, lighter center)
+    vignette = Image.new("L", (W, H), 0)
+    vd = ImageDraw.Draw(vignette)
+    cx, cy = W // 2, H // 2
+    for radius in range(max(W, H), 0, -8):
+        alpha = int(min(255, (radius / max(W, H)) * 200))
+        vd.ellipse([cx - radius, cy - radius * H // W,
+                    cx + radius, cy + radius * H // W], fill=alpha)
+    vig_overlay = Image.new("RGB", (W, H), (0, 0, 0))
+    bg_base = Image.composite(bg_base, vig_overlay, vignette)
+
+    # Load external background if provided
     bg_img = None
     if bg_path and os.path.exists(bg_path):
         try:
             raw = Image.open(bg_path).convert("RGB").resize((W, H), Image.LANCZOS)
             dark = Image.new("RGB", (W, H), (0, 0, 0))
-            bg_img = Image.blend(raw, dark, 0.45)
-            print(f"   [FRAMES] AI background loaded: {bg_path}")
+            bg_img = Image.blend(raw, dark, 0.55)
+            print(f"   [FRAMES] AI background: {bg_path}")
         except Exception as e:
             print(f"   [FRAMES] BG load failed ({e}), using gradient")
-            bg_img = None
-    cd=dur/max(len(lines),1)
+
+    # Subtle dot pattern overlay
+    dot_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dot_overlay)
+    gc = theme["grid"]
+    dot_col = (gc[0], gc[1], gc[2], 55)
+    for gx in range(0, W, 40):
+        for gy in range(0, H, 40):
+            dd.ellipse([gx - 1, gy - 1, gx + 1, gy + 1], fill=dot_col)
+
+    # Build sparkline data (animated line chart)
+    n_points = 16
+    spark_vals = [0.3 + 0.5 * abs(math.sin(i * 1.3 + 0.7)) for i in range(n_points)]
+    # Make it trend upward
+    spark_vals = [v + i * 0.022 for i, v in enumerate(spark_vals)]
+    spark_max = max(spark_vals)
+    spark_vals = [v / spark_max for v in spark_vals]
+
+    cd = dur / max(len(lines), 1)
+
     for out_idx, f in enumerate(frame_indices):
-        t=f/FPS; li=min(int(t/cd),len(lines)-1)
+        t = f / FPS
+        li = min(int(t / cd), len(lines) - 1)
+
+        # Base frame
         if bg_img:
-            img=bg_img.copy(); draw=ImageDraw.Draw(img)
+            img = bg_img.copy().convert("RGBA")
         else:
-            img=Image.new("RGB",(W,H)); draw=ImageDraw.Draw(img)
-            # Animated gradient background with pulse
-            pulse=math.sin(t*0.8)*0.12+0.08
-            for y in range(0,H,2):
-                ratio=y/H
-                r=max(0,min(255,c[0]+int(ratio*45+pulse*25)))
-                g=max(0,min(255,c[1]+int(ratio*28+pulse*12)))
-                b=max(0,min(255,c[2]+int(ratio*55+pulse*35)))
-                draw.rectangle([(0,y),(W,y+1)],fill=(r,g,b))
-            # Subtle grid overlay for depth
-            gc=theme["grid"]
-            for gx in range(0,W,80): draw.line([(gx,0),(gx,H)],fill=(gc[0],gc[1],gc[2]))
-            for gy in range(0,H,80): draw.line([(0,gy),(W,gy)],fill=(gc[0],gc[1],gc[2]))
-        # Animated chart bars (finance chart motif)
-        n_bars=8; bar_total_w=int(W*0.78); bar_w=bar_total_w//n_bars-4
-        chart_bx=int(W*0.11); chart_by=int(H*0.84); chart_h=int(H*0.09)
-        for i in range(n_bars):
-            bh=int(chart_h*(0.25+0.65*abs(math.sin(t*0.4+i*0.7+i*0.15))))
-            bx=chart_bx+i*(bar_w+4)
-            bright=int(120+80*abs(math.sin(t*0.5+i*0.4)))
-            bc=(min(255,a[0]*bright//200),min(255,a[1]*bright//200),min(255,a[2]*bright//200))
-            draw.rectangle([bx,chart_by-bh,bx+bar_w,chart_by],fill=bc)
-        # Accent bars top/bottom
-        draw.rectangle([0,0,W,8],fill=a); draw.rectangle([0,H-8,W,H],fill=a)
+            img = bg_base.copy().convert("RGBA")
+
+        # Apply dot overlay
+        img = Image.alpha_composite(img, dot_overlay)
+        img = img.convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        # ── Top bar ──────────────────────────────────────────────────────
+        # Gradient accent bar at top (4px solid + fade)
+        draw.rectangle([0, 0, W, 4], fill=a)
+        for dy in range(5, 18):
+            alpha = int(255 * (1 - (dy - 4) / 14))
+            r = int(a[0] * alpha / 255)
+            g = int(a[1] * alpha / 255)
+            b = int(a[2] * alpha / 255)
+            draw.line([(0, dy), (W, dy)], fill=(r, g, b))
+
+        # ── Niche pill label ─────────────────────────────────────────────
+        label = NICHE_LABELS.get(niche, "FINANCE CHANNEL")
+        pill_w = len(label) * 9 + 32
+        pill_x = W // 2 - pill_w // 2
+        _draw_rounded_rect(draw, [pill_x, 26, pill_x + pill_w, 56], 14,
+                           fill=(int(a[0] * 0.2), int(a[1] * 0.2), int(a[2] * 0.2)),
+                           outline=(*a, ), outline_width=1)
+        draw.text((W // 2, 41), label, fill=a, font=fnt(20), anchor="mm")
+
+        # ── Animated sparkline chart ─────────────────────────────────────
+        chart_h = int(H * 0.10)
+        chart_y = int(H * 0.80)
+        chart_x0 = int(W * 0.08)
+        chart_x1 = int(W * 0.92)
+        chart_w = chart_x1 - chart_x0
+        # Animated reveal: chart draws in from left over first 2s
+        reveal = min(1.0, t / 2.5)
+        pts_to_show = max(2, int(n_points * reveal))
+        pts = []
+        for i in range(pts_to_show):
+            px = chart_x0 + int(i * chart_w / (n_points - 1))
+            py = chart_y + chart_h - int(spark_vals[i] * chart_h)
+            # Subtle pulse on last visible point
+            if i == pts_to_show - 1:
+                pulse = math.sin(t * 8) * 3
+                py = int(py + pulse)
+            pts.append((px, py))
+        if len(pts) >= 2:
+            # Gradient line effect (draw twice with offset for glow)
+            glow = (min(255, a[0] + 40), min(255, a[1] + 40), min(255, a[2] + 40))
+            for dx_off, lw, col in [(-1, 3, (*a, 60)), (0, 2, a), (0, 1, glow)]:
+                off_pts = [(x + dx_off, y) for x, y in pts]
+                if len(off_pts) >= 2:
+                    draw.line(off_pts, fill=col if len(col) == 3 else col[:3], width=lw)
+            # Dot at latest point
+            lx, ly = pts[-1]
+            dot_r = 5
+            draw.ellipse([lx - dot_r, ly - dot_r, lx + dot_r, ly + dot_r], fill=a)
+            draw.ellipse([lx - 2, ly - 2, lx + 2, ly + 2], fill=(255, 255, 255))
+
+        # ── Main text card ───────────────────────────────────────────────
+        line = lines[li] if li < len(lines) else ""
+        # Ease in: slide up from below + fade
+        line_start_t = li * cd
+        line_age = t - line_start_t
+        ease = min(1.0, line_age / 0.18)  # 0.18s ease
+        y_offset = int((1 - ease) * 35)
+        text_alpha = int(ease * 255)
+
+        # Font size: shorter lines get bigger text
+        base_sz = 90 if vtype == "short" else 72
+        if len(line) > 10:
+            base_sz = int(base_sz * 0.85)
+        if len(line) > 16:
+            base_sz = int(base_sz * 0.78)
+        tsz = base_sz
+
+        # Text position: center vertically in the content zone
+        content_cy = H // 2 - (30 if vtype == "short" else 20)
+        text_y = content_cy + y_offset
+
+        if text_alpha > 10:
+            # Multi-layer text: outer glow → shadow → main
+            glow_sz = max(1, tsz // 20)
+            for off in [(glow_sz * 2, glow_sz * 2), (-glow_sz, glow_sz), (0, glow_sz * 2)]:
+                draw.text((W // 2 + off[0], text_y + off[1]), line,
+                          fill=(0, 0, 0), font=fnt(tsz), anchor="mm")
+            # Accent glow
+            draw.text((W // 2, text_y), line,
+                      fill=(min(255, a[0] + 30), min(255, a[1] + 30), min(255, a[2] + 30)),
+                      font=fnt(tsz), anchor="mm")
+            # Main text (white or accent depending on brightness)
+            brightness = (a[0] * 299 + a[1] * 587 + a[2] * 114) // 1000
+            text_col = (255, 255, 255) if brightness < 180 else a
+            draw.text((W // 2, text_y), line, fill=text_col, font=fnt(tsz), anchor="mm")
+
+        # Underline accent
+        try:
+            bbox = fnt(tsz).getbbox(line)
+            text_w = bbox[2] - bbox[0] if bbox else W // 2
+        except Exception:
+            text_w = W // 2
+        ul_w = min(text_w + 20, W - 80)
+        ul_y = text_y + tsz // 2 + 8
+        draw.rectangle([W // 2 - ul_w // 2, ul_y, W // 2 + ul_w // 2, ul_y + 2], fill=a)
+
+        # Line counter dots (shows progress through lines)
+        dot_row_y = int(H * 0.89)
+        dot_spacing = 14
+        n_dots = len(lines)
+        dots_x0 = W // 2 - (n_dots * dot_spacing) // 2
+        for di in range(n_dots):
+            dx = dots_x0 + di * dot_spacing + dot_spacing // 2
+            if di == li:
+                draw.ellipse([dx - 4, dot_row_y - 4, dx + 4, dot_row_y + 4], fill=a)
+            else:
+                draw.ellipse([dx - 2, dot_row_y - 2, dx + 2, dot_row_y + 2],
+                             fill=(int(a[0] * 0.35), int(a[1] * 0.35), int(a[2] * 0.35)))
+
+        # ── Bottom bar ───────────────────────────────────────────────────
+        draw.rectangle([0, H - 4, W, H], fill=a)
         # Progress bar
-        prog=int((t/dur)*(W-80)); draw.rectangle([40,H-6,40+max(prog,4),H-2],fill=a)
-        # Niche label
-        label=NICHE_LABELS.get(niche,"FINANCE CHANNEL")
-        draw.text((W//2,44),label,fill=a,font=fnt(32),anchor="mm")
-        draw.text((W//2,H-24),"FinanceFlow.app",fill=(70,70,70),font=fnt(14),anchor="mm")
-        # Main text with shadow + slide-in animation
-        line=lines[li] if li<len(lines) else ""
-        yoff=int((1-min(((t-li*cd)/cd)*5,1))*40)
-        tsz=int((82 if vtype=="short" else 68)*(1+0.025*math.sin(t*5)))
-        # Drop shadow
-        draw.text((W//2+3,H//2+yoff+3),line,fill=(0,0,0),font=fnt(tsz),anchor="mm")
-        draw.text((W//2,H//2+yoff),line,fill=a,font=fnt(tsz),anchor="mm")
-        # Fade in/out
-        fade=int(FPS*0.2)
-        if f<fade:
-            dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,f/fade)
-        elif f>nf-fade:
-            dk=Image.new("RGB",(W,H),(0,0,0)); img=Image.blend(dk,img,max(0,(nf-f)/fade))
-        # End card: last 3 seconds — black bg with "Made with FinanceFlow AI"
-        end_card_frames = int(FPS * 3)
-        if out_idx >= actual_nf - end_card_frames:
-            ec_alpha = min(1.0, (out_idx - (actual_nf - end_card_frames)) / max(1, FPS * 0.4))
-            ec = Image.new("RGB", (W, H), (0, 0, 0))
-            ec_draw = ImageDraw.Draw(ec)
-            ec_draw.text((W//2, H//2 - 40), "Made with", fill=(160, 160, 160), font=fnt(28), anchor="mm")
-            ec_draw.text((W//2, H//2 + 10), "FinanceFlow AI", fill=(255, 215, 0), font=fnt(52), anchor="mm")
-            ec_draw.text((W//2, H//2 + 70), "web-production-39b44.up.railway.app", fill=(100, 100, 100), font=fnt(18), anchor="mm")
+        prog = int((t / dur) * (W - 60))
+        draw.rectangle([30, H - 8, 30 + max(prog, 4), H - 5],
+                       fill=(int(a[0] * 0.6), int(a[1] * 0.6), int(a[2] * 0.6)))
+
+        # Watermark
+        draw.text((W // 2, H - 18), "FinanceFlow AI", fill=(80, 80, 80), font=fnt(14), anchor="mm")
+
+        # ── Fade in / out ────────────────────────────────────────────────
+        fade_frames = int(FPS * 0.25)
+        if f < fade_frames:
+            alpha = f / fade_frames
+            dk = Image.new("RGB", (W, H), (0, 0, 0))
+            img = Image.blend(dk, img, alpha)
+        elif f > nf - fade_frames:
+            alpha = max(0.0, (nf - f) / fade_frames)
+            dk = Image.new("RGB", (W, H), (0, 0, 0))
+            img = Image.blend(dk, img, alpha)
+
+        # ── End card (last 2.5s) ─────────────────────────────────────────
+        end_frames = int(FPS * 2.5)
+        if out_idx >= actual_nf - end_frames:
+            ec_progress = (out_idx - (actual_nf - end_frames)) / max(1, end_frames)
+            ec_alpha = min(1.0, ec_progress / 0.3)
+            ec = Image.new("RGB", (W, H), (6, 6, 10))
+            ecd = ImageDraw.Draw(ec)
+            # Top accent
+            ecd.rectangle([0, 0, W, 4], fill=a)
+            # Logo glow
+            ecd.text((W // 2, H // 2 - 45), "FinanceFlow", fill=a, font=fnt(56), anchor="mm")
+            ecd.text((W // 2, H // 2 + 18), "AI · automate your channel", fill=(130, 130, 130), font=fnt(22), anchor="mm")
+            ecd.rectangle([W // 2 - 60, H // 2 + 48, W // 2 + 60, H // 2 + 50], fill=a)
             img = Image.blend(img, ec, ec_alpha)
-        img.save(f"{fdir}/f{out_idx:06d}.jpg",quality=50)
+
+        img.save(f"{fdir}/f{out_idx:06d}.jpg", quality=88)
+
     return FPS
 
-def make_thumb(sd,out,vtype):
-    W,H=(1080,1920) if vtype=="short" else (1280,720)
-    img=Image.new("RGB",(W,H)); draw=ImageDraw.Draw(img); c,a=sd["color"],sd["accent"]
-    for y in range(H):
-        draw.line([(0,y),(W,y)],fill=(max(0,min(255,c[0]+30*y//H)),max(0,min(255,c[1]+20*y//H)),max(0,min(255,c[2]+35*y//H))))
-    draw.rectangle([0,0,W,10],fill=a); draw.rectangle([0,H-10,W,H],fill=a)
-    title_text=sd["title"][:40]
-    draw.text((W//2,H//2-60),title_text,fill=a,font=fnt(64 if vtype=="short" else 80),anchor="mm")
-    draw.text((W//2,H-50),"Subscribe for more",fill=(180,180,180),font=fnt(28),anchor="mm")
-    img.save(out,quality=95)
+def make_thumb(sd, out, vtype):
+    W, H = (1080, 1920) if vtype == "short" else (1280, 720)
+    c, a = sd["color"], sd["accent"]
+    title_text = sd.get("title", "")[:55]
+    niche = sd.get("niche", "personal_finance")
+
+    # Rich gradient background
+    img = Image.new("RGB", (W, H))
+    _gradient_rect(img, 0, 0, W, H,
+                   (max(0, c[0] + 20), max(0, c[1] + 12), max(0, c[2] + 28)),
+                   (max(0, c[0] - 10), max(0, c[1] - 8), max(0, c[2] - 12)))
+
+    draw = ImageDraw.Draw(img)
+
+    # Diagonal accent stripe
+    poly = [(0, 0), (W // 3, 0), (0, H // 4)]
+    draw.polygon(poly, fill=(int(a[0] * 0.25), int(a[1] * 0.25), int(a[2] * 0.25)))
+
+    # Top bar
+    draw.rectangle([0, 0, W, 12], fill=a)
+
+    # Channel label pill
+    label = NICHE_LABELS.get(niche, "FINANCE")
+    lw = len(label) * 18 + 48
+    lx = W // 2 - lw // 2
+    ly_top = H // 4 - 30 if vtype == "short" else 60
+    _draw_rounded_rect(draw, [lx, ly_top, lx + lw, ly_top + 52], 26,
+                       fill=(int(a[0] * 0.25), int(a[1] * 0.25), int(a[2] * 0.25)),
+                       outline=a, outline_width=2)
+    draw.text((W // 2, ly_top + 26), label, fill=a, font=fnt(26), anchor="mm")
+
+    # Title text with word wrap
+    words = title_text.split()
+    lines_out = []
+    cur = ""
+    max_chars = 18 if vtype == "short" else 28
+    for w in words:
+        if len(cur) + len(w) + 1 <= max_chars:
+            cur = (cur + " " + w).strip()
+        else:
+            if cur:
+                lines_out.append(cur)
+            cur = w
+    if cur:
+        lines_out.append(cur)
+    lines_out = lines_out[:4]
+
+    tsz = 110 if vtype == "short" else 96
+    if len(lines_out) > 2:
+        tsz = int(tsz * 0.82)
+
+    cy = H // 2
+    line_h = tsz + 12
+    start_y = cy - (len(lines_out) * line_h) // 2
+
+    for i, ln in enumerate(lines_out):
+        ty = start_y + i * line_h
+        # Shadow layers
+        for off in [(4, 4), (2, 3), (1, 1)]:
+            draw.text((W // 2 + off[0], ty + off[1]), ln,
+                      fill=(0, 0, 0), font=fnt(tsz), anchor="mm")
+        brightness = (a[0] * 299 + a[1] * 587 + a[2] * 114) // 1000
+        text_col = (255, 255, 255) if brightness < 160 else a
+        draw.text((W // 2, ty), ln, fill=text_col, font=fnt(tsz), anchor="mm")
+
+    # Subscribe CTA bar at bottom
+    draw.rectangle([0, H - 80, W, H], fill=(0, 0, 0))
+    draw.rectangle([0, H - 80, W, H - 76], fill=a)
+    draw.text((W // 2, H - 40), "SUBSCRIBE  ·  NEW VIDEOS DAILY",
+              fill=(200, 200, 200), font=fnt(28), anchor="mm")
+    draw.text((W // 2, H - 12), "FinanceFlow AI", fill=(80, 80, 80), font=fnt(18), anchor="mm")
+
+    img.save(out, quality=95)
 
 def render_video(fdir,audio,out,fps):
     all_frames = sorted([f for f in os.listdir(fdir) if f.endswith(".jpg")]) if os.path.isdir(fdir) else []
@@ -521,9 +826,10 @@ def render_video(fdir,audio,out,fps):
         print(f"   [RENDER] Safety-thinned to {frame_count} frames")
 
     if FFMPEG:
-        cmd=[FFMPEG,"-y","-threads","1","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
-             "-c:v","libx264","-preset","ultrafast","-crf","23","-pix_fmt","yuv420p",
-             "-c:a","aac","-b:a","128k","-shortest","-movflags","+faststart",out]
+        cmd=[FFMPEG,"-y","-threads","2","-framerate",str(fps),"-i",f"{fdir}/f%06d.jpg","-i",audio,
+             "-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p",
+             "-c:a","aac","-b:a","192k","-af","loudnorm=I=-16:LRA=11:TP=-1.5",
+             "-shortest","-movflags","+faststart",out]
         print(f"   [RENDER] Running: {' '.join(cmd)}")
         r=subprocess.run(cmd, capture_output=True)
         if r.returncode != 0:
