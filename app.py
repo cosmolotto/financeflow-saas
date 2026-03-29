@@ -2227,15 +2227,16 @@ def analytics():
     db = get_db()
     uid = request.uid
 
-    # Channel-level stats
+    # Channel-level stats with video counts from queue
     channels = db.execute(
-        "SELECT id, channel_name, niche, video_type, videos_uploaded, "
-        "COALESCE(subscriber_count,0) AS subscribers, "
-        "COALESCE(view_count,0) AS views, "
-        "COALESCE(video_count,0) AS yt_videos, "
-        "COALESCE(autopilot,0) AS autopilot, "
-        "COALESCE(monetized,0) AS monetized "
-        "FROM channels WHERE user_id=? AND active=1", (uid,)
+        "SELECT c.id, c.channel_name, c.niche, c.video_type, c.videos_uploaded, "
+        "COALESCE(c.subscriber_count,0) AS subscribers, "
+        "COALESCE(c.view_count,0) AS views, "
+        "COALESCE(c.video_count,0) AS yt_videos, "
+        "COALESCE(c.autopilot,0) AS autopilot, "
+        "COALESCE(c.monetized,0) AS monetized, "
+        "COALESCE((SELECT COUNT(*) FROM queue WHERE channel_id=c.id AND user_id=?),0) AS total_videos "
+        "FROM channels c WHERE c.user_id=? AND c.active=1", (uid, uid)
     ).fetchall()
 
     # Videos per day (last 30 days)
