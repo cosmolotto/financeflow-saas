@@ -317,7 +317,7 @@ def make_voice(text, out_wav, voice_id=None, rate=165):
             import openai as _oai
             _oai_client = _oai.OpenAI(api_key=OPENAI_KEY)
             response = _oai_client.audio.speech.create(
-                model="tts-1", voice="onyx", input=text, response_format="mp3"
+                model="tts-1-hd", voice="onyx", input=text, response_format="mp3"
             )
             mp3_path = out_wav.replace(".wav", "_oai.mp3")
             with open(mp3_path, "wb") as f:
@@ -333,8 +333,10 @@ def make_voice(text, out_wav, voice_id=None, rate=165):
     # Edge TTS (free, high quality, en-US-GuyNeural)
     try:
         import asyncio, edge_tts
+        # Use provided voice_id if it looks like an Edge TTS voice name
+        edge_voice = (voice_id if (voice_id and "Neural" in str(voice_id)) else "en-US-GuyNeural")
         async def _run_edge():
-            communicate = edge_tts.Communicate(text, "en-US-GuyNeural")
+            communicate = edge_tts.Communicate(text, edge_voice)
             mp3_path = out_wav.replace(".wav", "_edge.mp3")
             await communicate.save(mp3_path)
             return mp3_path
