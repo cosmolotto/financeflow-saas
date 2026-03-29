@@ -758,7 +758,14 @@ tr:hover td{background:rgba(255,255,255,0.01)}
     <div class="fd"><label>Video Type</label><select id="gm-t"><option value="short">📱 YouTube Short (60s)</option><option value="long">🎬 Long-form (~8 min)</option></select></div>
     {% if plan.custom_prompts %}
     <div class="fd"><label>Custom Title <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="text" id="gm-title" placeholder="Leave blank for AI"></div>
-    <div class="fd"><label>Your Prompt ✨ <span style="background:rgba(255,215,0,0.15);color:var(--gold);font-size:10px;padding:2px 7px;border-radius:100px">{% if is_admin %}ADMIN{% else %}PRO{% endif %}</span></label><textarea id="gm-p" rows="3" placeholder="Describe the video you want..."></textarea></div>
+    <div class="fd">
+      <label style="display:flex;align-items:center;justify-content:space-between">
+        <span>Your Prompt ✨ <span style="background:rgba(255,215,0,0.15);color:var(--gold);font-size:10px;padding:2px 7px;border-radius:100px">{% if is_admin %}ADMIN{% else %}PRO{% endif %}</span></span>
+        <button class="btn bo sm" id="suggest-btn" onclick="suggestTopics()" style="font-size:11px;padding:3px 10px">💡 Suggest Topics</button>
+      </label>
+      <textarea id="gm-p" rows="3" placeholder="Describe the video you want, or click 💡 Suggest Topics..."></textarea>
+      <div id="suggest-list" style="display:none;margin-top:7px"></div>
+    </div>
     {% else %}<div class="gate"><div class="gate-t">✨ Control this video's topic with Pro</div><p>Write custom prompts to control exactly what the video says.</p><button class="btn bg sm" style="margin-top:9px" onclick="cAll();sp('billing')">Upgrade →</button></div>{% endif %}
     <div class="mf"><button class="btn bg" onclick="submitGM()">⚡ Generate & Upload</button><button class="btn bo" onclick="cAll()">Cancel</button></div>
   </div>
@@ -902,6 +909,43 @@ async function submitGM(){
   cAll();const r=await fetch('/api/videos/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel_id:ch,type,custom_prompt:prompt,custom_title:title})});
   const d=await r.json();if(d.success){toast(d.message,'ok');sp('queue');setTimeout(poll,500);}else toast(d.error,'er');
 }
+async function suggestTopics(){
+  const btn=document.getElementById('suggest-btn');
+  const list=document.getElementById('suggest-list');
+  const promptEl=document.getElementById('gm-p');
+  // Get channel niche from current channel if possible
+  const chId=document.getElementById('gm-ch').value;
+  let niche='personal_finance', vtype=document.getElementById('gm-t').value||'short';
+  if(chId){
+    // Try to find niche from channels list (already loaded)
+    const rows=document.querySelectorAll('.ch-row[data-id="'+chId+'"]');
+    if(rows.length) niche=rows[0].dataset.niche||'personal_finance';
+  }
+  btn.disabled=true; btn.textContent='⏳ Loading...';
+  list.style.display='none';
+  try{
+    const r=await fetch('/api/channels/suggest-topics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({niche,video_type:vtype})});
+    const d=await r.json();
+    if(d.topics&&d.topics.length){
+      // Clear and rebuild list using DOM
+      while(list.firstChild)list.removeChild(list.firstChild);
+      const label=document.createElement('div');
+      label.style.cssText='font-size:11px;color:var(--muted);margin-bottom:5px';
+      label.textContent='Click a topic to use it:';
+      list.appendChild(label);
+      d.topics.forEach(topic=>{
+        const btn2=document.createElement('button');
+        btn2.className='btn bo sm';
+        btn2.style.cssText='display:block;width:100%;text-align:left;margin-bottom:4px;font-size:12px;padding:6px 10px';
+        btn2.textContent=topic;
+        btn2.onclick=function(){promptEl.value=topic;list.style.display='none';};
+        list.appendChild(btn2);
+      });
+      list.style.display='block';
+    } else toast('No topics returned','er');
+  }catch(e){toast('Could not fetch suggestions','er');}
+  btn.disabled=false; btn.textContent='💡 Suggest Topics';
+}
 function switchGenTab(t){
   document.getElementById('gen-ai-tab').style.display=t==='ai'?'':'none';
   document.getElementById('gen-upload-tab').style.display=t==='upload'?'':'none';
@@ -966,6 +1010,7 @@ async function doUpload(){
   xhr.open('POST','/api/videos/upload-own');xhr.send(fd);
 }
 async function cancelJ(id){const r=await fetch('/api/queue/'+id+'/cancel',{method:'POST'});const d=await r.json();if(d.success){toast('Cancelled');poll();}}
+async function retryJ(id){const r=await fetch('/api/queue/'+id+'/retry',{method:'POST'});const d=await r.json();if(d.success){toast('Re-queued!','ok');poll();}else toast(d.error||'Failed','er');}
 
 // PROMPTS
 function loadPrompt(prompt,title){sp('generate');const pe=document.getElementById('gen-prompt');const te=document.getElementById('gen-title');if(pe)pe.value=decode(prompt);if(te)te.value=decode(title);toast('Prompt loaded!','inf');}
@@ -1054,7 +1099,7 @@ async function submitPromotion(){
 
 // REAL-TIME POLL
 function mkP(s){return({'uploaded':'pu','pending':'pp','processing':'ppr','failed':'pf','cancelled':'pc'})[s]||'pc';}
-function mkQI(q){const icon=q.status==='processing'?'⚙️':'⏳';const cust=q.custom_prompt?'<span style="color:var(--gold);font-size:10px"> · Custom</span>':'';const pr=q.progress?`<div class="qi-p">${q.progress}</div>`:'';const can=q.status==='pending'?`<button class="btn xs bd" onclick="cancelJ(${q.id})">✕</button>`:'';const lbl=q.custom_title||(q.custom_prompt?'✨ Custom':((q.niche||'').replace(/_/g,' ')+' '+(q.video_type||'')));return `<div class="qi"><div class="qic ${q.status}">${icon}</div><div class="qi-i"><div class="qi-t">${lbl}</div><div class="qi-s">${q.channel_name||''} · ${(q.video_type||'').toUpperCase()}${cust}</div>${pr}</div><span class="pl ${mkP(q.status)}">${q.status.charAt(0).toUpperCase()+q.status.slice(1)}</span>${can}</div>`;}
+function mkQI(q){const icon=q.status==='processing'?'⚙️':q.status==='failed'?'❌':q.status==='cancelled'?'🚫':'⏳';const cust=q.custom_prompt?'<span style="color:var(--gold);font-size:10px"> · Custom</span>':'';const pr=q.progress?`<div class="qi-p">${q.progress}</div>`:'';const can=q.status==='pending'?`<button class="btn xs bd" onclick="cancelJ(${q.id})">✕</button>`:['failed','cancelled'].includes(q.status)?`<button class="btn xs bg" onclick="retryJ(${q.id})" style="font-size:10px">↺ Retry</button>`:'';const lbl=q.custom_title||(q.custom_prompt?'✨ Custom':((q.niche||'').replace(/_/g,' ')+' '+(q.video_type||'')));return `<div class="qi"><div class="qic ${q.status}">${icon}</div><div class="qi-i"><div class="qi-t">${lbl}</div><div class="qi-s">${q.channel_name||''} · ${(q.video_type||'').toUpperCase()}${cust}</div>${pr}</div><span class="pl ${mkP(q.status)}">${q.status.charAt(0).toUpperCase()+q.status.slice(1)}</span>${can}</div>`;}
 function mkVR(v){const link=v.youtube_url?`<a href="${v.youtube_url}" target="_blank" class="yl">▶ Watch</a>`:'—';const er=v.error_msg?`<div style="font-size:10px;color:var(--red);margin-top:2px">${v.error_msg.substring(0,55)}</div>`:'';return `<tr><td style="max-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${v.title||'—'}</td><td style="color:var(--muted)">${v.channel_name||'—'}</td><td><span class="tg">${(v.type||'short').toUpperCase()}</span></td><td><span class="pl ${mkP(v.status)}">${v.status.charAt(0).toUpperCase()+v.status.slice(1)}</span>${er}</td><td style="color:var(--muted);font-size:11px">${(v.created_at||'').slice(0,10)||'—'}</td><td>${link}</td></tr>`;}
 function setEl(id,html){const e=document.getElementById(id);if(e)e.innerHTML=html;}
 function setTx(id,val){const e=document.getElementById(id);if(e)e.textContent=val;}

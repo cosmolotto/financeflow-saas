@@ -1650,6 +1650,109 @@ def channel_preflight():
     })
 
 
+@app.route("/api/channels/suggest-topics", methods=["POST"])
+@login_required
+def suggest_topics():
+    """Return 10 trending video topic ideas for a given niche using OpenAI or curated fallbacks."""
+    d = request.get_json() or {}
+    niche = d.get("niche", "personal_finance")
+    vtype = d.get("video_type", "short")
+    niche_label = niche.replace("_", " ")
+
+    FALLBACK_TOPICS = {
+        "personal_finance": [
+            "5 money mistakes that keep you broke",
+            "How I saved $10,000 in 6 months on a normal salary",
+            "The 50/30/20 rule explained in 60 seconds",
+            "Why your savings account is losing you money",
+            "How to build a 3-month emergency fund fast",
+            "The one habit rich people share",
+            "Roth IRA vs 401k: which one should you pick first",
+            "How to negotiate a raise and actually win",
+            "Stop buying coffee — the real math nobody shows you",
+            "Zero-based budgeting: what it is and why it works",
+        ],
+        "investing": [
+            "What is an index fund and why Warren Buffett loves them",
+            "How compound interest turns $100/month into $1M",
+            "S&P 500 vs total market: which ETF to pick",
+            "Dollar cost averaging explained with real numbers",
+            "Why most stock pickers lose to the market",
+            "How to invest your first $1,000",
+            "Dividend investing: how to earn passive income from stocks",
+            "The biggest investing mistakes beginners make",
+            "How to read a stock chart for beginners",
+            "Bonds vs stocks: what's the right balance for your age",
+        ],
+        "crypto": [
+            "What is Bitcoin and how does it actually work",
+            "Why crypto is so volatile — the real explanation",
+            "DCA into Bitcoin: does it actually work",
+            "Crypto taxes explained: what you owe and how to track it",
+            "The biggest crypto scams and how to avoid them",
+            "What is Ethereum and why developers use it",
+            "How to store crypto safely — hardware wallets explained",
+            "Is Bitcoin a hedge against inflation? The data says...",
+            "Crypto vs stocks: which made more money over 10 years",
+            "Altcoins: which ones have real utility and which are hype",
+        ],
+        "real_estate": [
+            "Rent vs buy: the honest math for 2025",
+            "How to house hack and live for free",
+            "What is a REIT and how to invest in real estate without buying property",
+            "The hidden costs of buying a home nobody tells you",
+            "How to analyze a rental property in 5 minutes",
+            "Short-term vs long-term rentals: which cash flows better",
+            "How to invest in real estate with $10,000",
+            "Cap rate explained for beginners",
+            "Why real estate builds wealth faster than stocks for most people",
+            "How to buy your first rental property step by step",
+        ],
+    }
+
+    if OPENAI_KEY and HAS_OPENAI:
+        try:
+            fmt = "60-second Shorts" if vtype == "short" else "8-10 minute videos"
+            client = openai_lib.OpenAI(api_key=OPENAI_KEY)
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": (
+                        "You are a YouTube content strategist specializing in finance channels. "
+                        "Return ONLY a JSON array of exactly 10 strings — video topic titles. "
+                        "No numbering, no explanations, no markdown."
+                    )},
+                    {"role": "user", "content": (
+                        f"Give me 10 trending YouTube video topic titles for a {niche_label} channel "
+                        f"that posts {fmt}. Topics should be highly searchable, specific, and drive clicks."
+                    )},
+                ],
+                max_tokens=400,
+                temperature=0.9,
+            )
+            raw = resp.choices[0].message.content.strip()
+            # Try to parse as JSON array
+            import ast
+            try:
+                topics = json.loads(raw)
+                if isinstance(topics, list):
+                    return jsonify({"topics": topics[:10], "source": "openai"})
+            except Exception:
+                pass
+            # Fallback: split by newlines
+            topics = [t.lstrip('0123456789.-) ').strip() for t in raw.splitlines() if t.strip()]
+            topics = [t for t in topics if len(t) > 10][:10]
+            if topics:
+                return jsonify({"topics": topics, "source": "openai"})
+        except Exception as e:
+            print(f"[OPENAI SUGGEST] {e} — using fallback topics")
+
+    # Curated fallback
+    key = niche if niche in FALLBACK_TOPICS else "personal_finance"
+    topics = random.sample(FALLBACK_TOPICS[key], min(10, len(FALLBACK_TOPICS[key])))
+    return jsonify({"topics": topics, "source": "fallback"})
+
+
 @app.route("/api/channels")
 @login_required
 def get_channels():
@@ -2813,6 +2916,26 @@ def cancel_job(jid):
          request.uid))
     db.commit()
     return jsonify({"success": True})
+
+
+@app.route("/api/queue/<int:jid>/retry", methods=["POST"])
+@login_required
+def retry_job(jid):
+    """Reset a failed or cancelled job back to pending so the worker picks it up again."""
+    db = get_db()
+    row = db.execute(
+        "SELECT id, status FROM queue WHERE id=? AND user_id=?",
+        (jid, request.uid)).fetchone()
+    if not row:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    if row["status"] not in ("failed", "cancelled"):
+        return jsonify({"success": False, "error": f"Cannot retry a job with status '{row['status']}'"}), 400
+    db.execute(
+        "UPDATE queue SET status='pending', error_msg=NULL, progress=NULL, started_at=NULL, completed_at=NULL "
+        "WHERE id=? AND user_id=?",
+        (jid, request.uid))
+    db.commit()
+    return jsonify({"success": True, "message": "Job re-queued"})
 
 # ── Channel settings / social / autopilot / monetized ────────────────────────
 
