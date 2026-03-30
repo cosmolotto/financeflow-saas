@@ -91,6 +91,8 @@ except ImportError:
     HAS_LIMITER = False
 
 # ── App & config ────────────────────────────────────────────────────────
+from routes.paddle import paddle_bp
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-railway")
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -115,6 +117,8 @@ STRIPE_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WH_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 MORVEN_WALLET_API = os.environ.get("MORVEN_WALLET_API_URL", "https://morven-wallet-api.onrender.com")
 MORVEN_AIRDROP_KEY = os.environ.get("MORVEN_AIRDROP_KEY", "")
+PADDLE_VENDOR_ID = os.environ.get("PADDLE_VENDOR_ID", "")
+PADDLE_API_KEY = os.environ.get("PADDLE_API_KEY", "")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 REDIS_URL = os.environ.get("REDIS_URL", "")
 ELEVENLABS_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
@@ -158,6 +162,9 @@ PLANS = {
         "social_posting": True,
         "autopilot": True},
 }
+
+# ── Paddle blueprint ────────────────────────────────────────────────────
+app.register_blueprint(paddle_bp)
 
 # ── Stripe setup ────────────────────────────────────────────────────────
 if HAS_STRIPE and STRIPE_KEY:

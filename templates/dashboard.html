@@ -796,12 +796,19 @@ tr:hover td{background:rgba(255,255,255,0.01)}
       </select>
     </div>
     <div class="fd"><label>Payment Method</label>
-      <select id="pay-method" onchange="toggleMrvPaySection(this.value)">
+      <select id="pay-method" onchange="togglePaySection(this.value)">
         <option value="bank_transfer">🏦 Bank Transfer</option>
         <option value="jazzcash">📱 JazzCash</option>
         <option value="easypaisa">💚 EasyPaisa</option>
+        <option value="paddle">💳 Upgrade with Paddle (Card / PayPal)</option>
         <option value="mrv">◈ Pay with MRV (MorvenWallet)</option>
       </select>
+    </div>
+    <div id="paddle-pay-section" style="display:none;background:rgba(0,150,255,0.04);border:1px solid rgba(0,150,255,0.2);border-radius:9px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;color:#4fa3e0;font-weight:700;margin-bottom:6px">💳 Paddle Checkout</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Secure card / PayPal checkout via Paddle. You'll be redirected to complete payment.</div>
+      <button class="btn bg sm" id="paddle-checkout-btn" onclick="startPaddleCheckout()">Open Checkout →</button>
+      <div id="paddle-status" style="font-size:12px;margin-top:8px;display:none"></div>
     </div>
     <div id="mrv-pay-section" style="display:none;background:rgba(224,200,117,0.06);border:1px solid rgba(224,200,117,0.25);border-radius:9px;padding:14px;margin-bottom:14px">
       <div style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:8px">◈ MorvenWallet Payment</div>
@@ -1320,16 +1327,53 @@ async function loadWizard(){
 // ── MorvenWallet Integration ─────────────────────────────────────────────
 let _mrvJwt = null;
 
-function toggleMrvPaySection(method) {
+function togglePaySection(method) {
   const mrvSec = document.getElementById('mrv-pay-section');
+  const paddleSec = document.getElementById('paddle-pay-section');
   const refSec = document.getElementById('ref-pay-section');
+  mrvSec.style.display = 'none';
+  paddleSec.style.display = 'none';
+  refSec.style.display = 'block';
   if (method === 'mrv') {
     mrvSec.style.display = 'block';
     refSec.style.display = 'none';
     loadMrvBalance();
-  } else {
-    mrvSec.style.display = 'none';
-    refSec.style.display = 'block';
+  } else if (method === 'paddle') {
+    paddleSec.style.display = 'block';
+    refSec.style.display = 'none';
+  }
+}
+// keep old name as alias for any remaining callers
+const toggleMrvPaySection = togglePaySection;
+
+async function startPaddleCheckout() {
+  const plan = document.getElementById('pay-plan').value;
+  const btn = document.getElementById('paddle-checkout-btn');
+  const status = document.getElementById('paddle-status');
+  btn.disabled = true; btn.textContent = 'Creating checkout...';
+  status.style.display = 'none';
+  try {
+    const r = await fetch('/api/paddle/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan })
+    });
+    const d = await r.json();
+    if (d.checkout_url) {
+      window.open(d.checkout_url, '_blank', 'width=640,height=760');
+      status.style.display = 'block';
+      status.style.color = 'var(--green)';
+      status.textContent = '✅ Checkout opened — complete payment in the new window. This page will update once confirmed.';
+    } else {
+      throw new Error(d.error || 'Could not create checkout');
+    }
+  } catch(e) {
+    status.style.display = 'block';
+    status.style.color = 'var(--red)';
+    status.textContent = e.message;
+    toast(e.message, 'er');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Open Checkout →';
   }
 }
 
@@ -1364,6 +1408,7 @@ async function connectMrvWallet() {
 const _origSubmitPayment = submitPayment;
 async function submitPayment() {
   const method = document.getElementById('pay-method').value;
+  if (method === 'paddle') { await startPaddleCheckout(); return; }
   if (method !== 'mrv') { _origSubmitPayment(); return; }
   if (!_mrvJwt) { toast('Please connect your MorvenWallet first', 'er'); return; }
   const plan = document.getElementById('pay-plan').value;
